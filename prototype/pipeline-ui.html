@@ -1,14 +1,16 @@
 <!doctype html>
 <!--
   PROTOTYPE — THROWAWAY. Do not ship.
-  threadline issue #8: three radically different information architectures for the
-  pipeline web UI, switchable via ?variant=A|B|C and the floating bottom bar (or ← / → keys).
+  threadline issue #8: three IA variants for the pipeline web UI, switchable via
+  ?variant=A|B|C and the floating bottom bar (or ← / → keys).
 
-    A — Sidebar drill-down : dashboard → effort page → full-page session (Linear-style)
+    A — Sidebar drill-down : dashboard → effort page → full-page session
     B — Pipeline-first board: six stage columns w/ gates, effort drawer, session overlay
-    C — IDE split          : efforts tree | pipeline rail + stage detail | docked session chat
+    C — IDE split (WINNER)  : efforts tree | pipeline rail + stage detail | docked session chat
 
-  Theme toggle (dark/light) in the switcher bar. All data is mocked, all state in memory.
+  Visual system: Kodeo-style reference — near-black frame, charcoal panels, mint accent,
+  pill badges, grouped sidebar with ⌘K search, hint-chip composer, tick progress bars.
+  Theme toggle (dark/light) in the switcher bar. All data mocked, all state in memory.
 -->
 <html lang="en">
 <head>
@@ -17,145 +19,212 @@
 <title>threadline — UI prototype</title>
 <style>
   :root {
-    --bg: #0d1117; --bg2: #161b22; --bg3: #1c2129; --border: #2d333b;
-    --fg: #e6edf3; --fg2: #9198a1; --fg3: #6e7681;
-    --accent: #4f8cff; --accent-dim: #1f3a63;
-    --ok: #3fb950; --warn: #d29922; --danger: #f85149; --purple: #a371f7;
-    --lock: #6e7681;
-    --radius: 8px;
-    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --bg: #0b0c0e;          /* page frame */
+    --panel: #131417;       /* sidebars, rails */
+    --surface: #17191d;     /* cards */
+    --surface2: #1e2126;    /* raised / hover */
+    --border: #24272d;
+    --border2: #32363e;
+    --fg: #e9ebee;
+    --fg2: #a3a7af;
+    --fg3: #71757d;
+    --mint: #4ade9c;
+    --mint-ink: #082b1b;    /* text on mint fills */
+    --mint-tint: rgba(74,222,156,.10);
+    --blue: #7ab3ff;
+    --purple: #b19bf5;
+    --amber: #e8b04b;
+    --red: #f27d75;
+    --radius: 12px;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   }
   [data-theme="light"] {
-    --bg: #ffffff; --bg2: #f6f8fa; --bg3: #eef1f4; --border: #d1d9e0;
-    --fg: #1f2328; --fg2: #59636e; --fg3: #818b98;
-    --accent: #0969da; --accent-dim: #ddeafd;
-    --ok: #1a7f37; --warn: #9a6700; --danger: #d1242f; --purple: #8250df;
-    --lock: #818b98;
+    --bg: #ebedf0;
+    --panel: #f7f8f9;
+    --surface: #ffffff;
+    --surface2: #f0f2f4;
+    --border: #dcdfe4;
+    --border2: #c8ccd3;
+    --fg: #1b1e23;
+    --fg2: #555a63;
+    --fg3: #7d828b;
+    --mint: #0e9f6e;
+    --mint-ink: #ffffff;
+    --mint-tint: rgba(14,159,110,.08);
+    --blue: #2f6fd0;
+    --purple: #7c5cd6;
+    --amber: #a06a10;
+    --red: #cf3f38;
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
-  body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
-  #app { height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--fg); font: 13.5px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  #app { height: 100%; overflow: hidden; padding: 10px; }
+  #app > * { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--panel); }
   button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
-  h1,h2,h3 { font-weight: 600; }
+  h1,h2,h3 { font-weight: 600; letter-spacing: -0.01em; }
+  input { font: inherit; color: var(--fg); }
+  input::placeholder { color: var(--fg3); }
   .mono { font-family: var(--mono); font-size: 12px; }
   .dim { color: var(--fg2); } .dimmer { color: var(--fg3); }
-  .pill { display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:99px; font-size:11px; font-weight:600; border:1px solid var(--border); color:var(--fg2); white-space:nowrap; }
-  .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
-  .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
-  .pill.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
-  .pill.accent { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-  .pill.purple { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 40%, transparent); }
-  .dot { width:8px; height:8px; border-radius:99px; display:inline-block; flex:none; }
-  .dot.running { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); animation: pulse 1.6s infinite; }
-  .dot.approval { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 25%, transparent); animation: pulse 1.1s infinite; }
+
+  /* ---------- primitives ---------- */
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:99px; font-size:11.5px; font-weight:500; border:1px solid var(--border2); color:var(--fg2); background: var(--surface); white-space:nowrap; }
+  .pill.mint   { color: var(--mint);   border-color: color-mix(in srgb, var(--mint) 35%, transparent);   background: var(--mint-tint); }
+  .pill.blue   { color: var(--blue);   border-color: color-mix(in srgb, var(--blue) 30%, transparent);   background: color-mix(in srgb, var(--blue) 8%, transparent); }
+  .pill.amber  { color: var(--amber);  border-color: color-mix(in srgb, var(--amber) 35%, transparent);  background: color-mix(in srgb, var(--amber) 8%, transparent); }
+  .pill.purple { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 30%, transparent); background: color-mix(in srgb, var(--purple) 8%, transparent); }
+  .pill.red    { color: var(--red);    border-color: color-mix(in srgb, var(--red) 30%, transparent);    background: color-mix(in srgb, var(--red) 8%, transparent); }
+  .pill.solid-mint { background: var(--mint); border-color: var(--mint); color: var(--mint-ink); font-weight:600; }
+  .dot { width:7px; height:7px; border-radius:99px; display:inline-block; flex:none; }
+  .dot.running { background: var(--mint); animation: pulse 1.6s infinite; }
+  .dot.approval { background: var(--amber); animation: pulse 1.1s infinite; }
   .dot.human { background: var(--purple); }
   .dot.done { background: var(--fg3); }
-  @keyframes pulse { 50% { opacity:.55; } }
-  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); }
-  .btn { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); font-size: 13px; font-weight: 500; }
+  @keyframes pulse { 50% { opacity:.45; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .dot, .spinner { animation: none !important; } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:9px; border:1px solid var(--border2); background:var(--surface2); font-size:13px; font-weight:500; transition: border-color .15s, background .15s; }
   .btn:hover { border-color: var(--fg3); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
-  .btn.danger-outline { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, transparent); background: none; }
-  .btn.sm { padding: 2px 9px; font-size: 12px; }
+  .btn.primary { background: var(--mint); border-color: var(--mint); color: var(--mint-ink); font-weight:600; }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.ghost-mint { color: var(--mint); border-color: color-mix(in srgb, var(--mint) 35%, transparent); background: var(--mint-tint); }
+  .btn.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 35%, transparent); background: color-mix(in srgb, var(--red) 7%, transparent); }
+  .btn.sm { padding: 3px 10px; font-size: 12px; border-radius: 8px; }
+  .btn.icon { padding: 6px 8px; }
+  kbd { font: 10.5px/1 var(--mono); color: var(--fg2); background: var(--surface2); border: 1px solid var(--border2); border-radius: 5px; padding: 3px 5px; }
 
-  /* ---------- shared: stage stepper ---------- */
+  .search { display:flex; align-items:center; gap:8px; background: var(--surface); border:1px solid var(--border); border-radius:10px; padding:7px 10px; }
+  .search input { flex:1; background:none; border:none; outline:none; min-width:0; font-size:13px; }
+  .search .lens { color: var(--fg3); flex:none; }
+
+  .ticks { display:flex; gap:3px; align-items:flex-end; height:18px; }
+  .ticks i { flex:1; max-width:6px; min-width:3px; height:100%; border-radius:2px; background: var(--surface2); }
+  .ticks i.on { background: var(--mint); }
+
+  /* ---------- top bar (shared) ---------- */
+  .topbar { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); flex:none; }
+  .topbar .crumb { display:inline-flex; align-items:center; gap:8px; padding:5px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); font-weight:600; font-size:13px; }
+  .topbar .crumb .mark { color: var(--mint); }
+
+  /* ---------- shared: sidebar vocabulary ---------- */
+  .brand { display:flex; align-items:center; gap:9px; padding: 4px 6px 14px; font-weight:700; font-size:15px; letter-spacing:-0.01em; }
+  .brand .mark { color: var(--mint); font-size:17px; }
+  .brand .actions { margin-left:auto; display:flex; gap:2px; color:var(--fg3); }
+  .brand .actions button { padding:4px 6px; border-radius:7px; }
+  .brand .actions button:hover { background: var(--surface2); color: var(--fg2); }
+  .navsec { font-size:11px; font-weight:600; color:var(--fg3); padding: 16px 10px 6px; }
+  .navitem { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:9px; text-align:left; width:100%; font-size:13px; color:var(--fg2); font-weight:500; }
+  .navitem:hover { background: var(--surface2); }
+  .navitem.active { background: var(--surface2); color: var(--fg); border:1px solid var(--border2); padding:6px 9px; }
+  .navitem .count { margin-left:auto; font-size:11px; color:var(--fg3); background:var(--surface); border:1px solid var(--border2); border-radius:6px; padding:1px 7px; }
+
+  /* ---------- shared: stage stepper (A + B drawer) ---------- */
   .stepper { display:flex; align-items:center; overflow-x:auto; padding: 4px 0; }
-  .step { display:flex; flex-direction:column; align-items:center; gap:6px; min-width:96px; text-align:center; position:relative; }
-  .step .bubble { width:28px; height:28px; border-radius:99px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; border:2px solid var(--border); background:var(--bg2); color:var(--fg3); }
-  .step.done .bubble { background: var(--ok); border-color: var(--ok); color:#fff; }
-  .step.current .bubble { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
-  .step.locked .bubble { color: var(--lock); }
-  .step .slabel { font-size: 11px; font-weight:600; color: var(--fg2); }
-  .step.current .slabel { color: var(--fg); }
-  .gatelink { flex:none; width:34px; height:2px; background: var(--border); position:relative; top:-11px; }
-  .gatelink.open { background: var(--ok); }
-  .gatelink .gate { position:absolute; top:-8px; left:50%; transform:translateX(-50%); font-size:11px; }
+  .step { display:flex; flex-direction:column; align-items:center; gap:7px; min-width:92px; text-align:center; }
+  .step .bubble { width:26px; height:26px; border-radius:99px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; border:1.5px solid var(--border2); background:var(--surface); color:var(--fg3); }
+  .step.done .bubble { background: var(--mint-tint); border-color: var(--mint); color: var(--mint); }
+  .step.current .bubble { border-color: var(--mint); color: var(--mint); box-shadow: 0 0 0 4px var(--mint-tint); }
+  .step .slabel { font-size: 11px; font-weight:500; color: var(--fg3); }
+  .step.done .slabel { color: var(--fg2); }
+  .step.current .slabel { color: var(--fg); font-weight:600; }
+  .gatelink { flex:none; width:30px; height:1.5px; background: var(--border2); position:relative; top:-10px; }
+  .gatelink.open { background: var(--mint); }
+  .gatelink .gate { position:absolute; top:-7px; left:50%; transform:translateX(-50%); font-size:10px; }
 
   /* ---------- shared: chat ---------- */
   .chat { display:flex; flex-direction:column; height:100%; min-height:0; }
-  .chat-head { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--border); flex:none; flex-wrap:wrap; }
-  .chat-scroll { flex:1; overflow-y:auto; padding: 14px; display:flex; flex-direction:column; gap:10px; }
-  .msg { max-width: 78%; padding: 8px 12px; border-radius: 10px; font-size: 13px; white-space: pre-wrap; }
-  .msg.user { align-self:flex-end; background: var(--accent-dim); border:1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
-  .msg.agent { align-self:flex-start; background: var(--bg2); border:1px solid var(--border); }
-  .msg.tool { align-self:flex-start; font-family: var(--mono); font-size:12px; background: var(--bg3); border:1px dashed var(--border); color: var(--fg2); }
-  .approval-card { align-self:stretch; border:1px solid color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 8%, var(--bg2)); border-radius:10px; padding:12px 14px; }
-  .approval-card .cmd { font-family: var(--mono); font-size:12px; background: var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin:8px 0; }
-  .chat-input { flex:none; border-top:1px solid var(--border); padding:10px 14px; display:flex; gap:8px; }
-  .chat-input input { flex:1; background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--fg); font:inherit; }
-  .chat-input input:focus { outline:none; border-color: var(--accent); }
+  .chat-head { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border); flex:none; flex-wrap:wrap; }
+  .chat-scroll { flex:1; overflow-y:auto; padding: 16px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width: 82%; font-size: 13px; white-space: pre-wrap; }
+  .msg.user { align-self:flex-end; background: var(--surface2); border:1px solid var(--border2); padding:9px 13px; border-radius: 12px 12px 4px 12px; }
+  .msg.agent { align-self:flex-start; display:flex; gap:10px; }
+  .msg.agent .mark { color: var(--mint); flex:none; padding-top:1px; }
+  .msg.tool { align-self:flex-start; font-family: var(--mono); font-size:11.5px; background: var(--surface); border:1px solid var(--border); color: var(--fg2); padding:6px 11px; border-radius:8px; margin-left:24px; }
+  .approval-card { align-self:stretch; border:1px solid color-mix(in srgb, var(--amber) 40%, transparent); background: color-mix(in srgb, var(--amber) 6%, var(--surface)); border-radius:var(--radius); padding:13px 15px; }
+  .approval-card .cmd { font-family: var(--mono); font-size:12px; background: var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; margin:9px 0; color: var(--fg); }
+  /* composer */
+  .composer { flex:none; padding: 10px 16px 14px; }
+  .hints { display:flex; gap:8px; align-items:center; margin-bottom:9px; flex-wrap:wrap; }
+  .hint { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--fg3); border:1px solid var(--border); border-radius:8px; padding:3px 8px; background: var(--surface); }
+  .hint .slash { color: var(--fg2); font-weight:600; }
+  .composer-box { background: var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 12px 10px; transition: border-color .15s; }
+  .composer-box:focus-within { border-color: var(--border2); }
+  .composer-box input.msgline { width:100%; background:none; border:none; outline:none; font-size:13.5px; padding: 2px 4px 14px; }
+  .composer-row { display:flex; align-items:center; gap:6px; }
+  .composer-row .spacer { flex:1; }
+
+  /* session list row (A effort page, B drawer) */
+  .session-row { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .session-row:hover { background: var(--surface2); }
+  .session-row:last-child { border-bottom:none; }
 
   /* ---------- Variant A ---------- */
-  .va { display:grid; grid-template-columns: 230px 1fr; height:100%; }
-  .va-side { border-right:1px solid var(--border); background: var(--bg2); padding: 14px 10px; display:flex; flex-direction:column; gap:2px; overflow-y:auto; }
-  .va-side .wsname { font-weight:700; padding: 4px 10px 12px; font-size:15px; display:flex; gap:8px; align-items:center; }
-  .va-side .navsec { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--fg3); padding: 12px 10px 4px; }
-  .va-side .navitem { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; text-align:left; width:100%; font-size:13px; color:var(--fg2); }
-  .va-side .navitem:hover { background: var(--bg3); }
-  .va-side .navitem.active { background: var(--bg3); color: var(--fg); font-weight:600; }
-  .va-main { overflow-y:auto; min-height:0; display:flex; flex-direction:column; }
-  .va-crumbs { padding: 14px 24px 0; font-size:13px; color:var(--fg3); flex:none; }
-  .va-crumbs button { color: var(--accent); }
-  .va-body { padding: 16px 24px 90px; flex:1; min-height:0; display:flex; flex-direction:column; }
-  .va-effort-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:14px; margin-top:14px; }
-  .va-effort-card { padding:16px; cursor:pointer; transition: border-color .12s; }
-  .va-effort-card:hover { border-color: var(--accent); }
-  .va-session-row { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
-  .va-session-row:hover { background: var(--bg3); }
-  .va-session-row:last-child { border-bottom:none; }
-  .va-chatwrap { flex:1; min-height:420px; display:flex; flex-direction:column; }
+  .va { display:grid; grid-template-columns: 244px 1fr; height:100%; }
+  .va-side { border-right:1px solid var(--border); background: var(--panel); padding: 16px 12px; display:flex; flex-direction:column; overflow-y:auto; }
+  .va-main { overflow-y:auto; min-height:0; display:flex; flex-direction:column; background: var(--bg); }
+  .va-crumbs { padding: 12px 24px 0; font-size:13px; color:var(--fg3); flex:none; }
+  .va-crumbs button { color: var(--fg2); } .va-crumbs button:hover { color: var(--mint); }
+  .va-body { padding: 14px 24px 96px; flex:1; min-height:0; display:flex; flex-direction:column; }
+  .va-effort-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap:12px; margin-top:14px; }
+  .va-effort-card { padding:16px; cursor:pointer; transition: border-color .15s; }
+  .va-effort-card:hover { border-color: var(--border2); }
+  .va-chatwrap { flex:1; min-height:440px; display:flex; flex-direction:column; margin-top:12px; }
 
   /* ---------- Variant B ---------- */
-  .vb { height:100%; display:flex; flex-direction:column; }
-  .vb-top { flex:none; padding: 14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:14px; }
-  .vb-board { flex:1; display:flex; overflow-x:auto; padding: 16px 16px 90px; gap:0; min-height:0; }
+  .vb { height:100%; display:flex; flex-direction:column; background: var(--bg); }
+  .vb-board { flex:1; display:flex; overflow-x:auto; padding: 16px 16px 96px; min-height:0; }
   .vb-col { flex: 1 0 210px; max-width: 280px; display:flex; flex-direction:column; min-height:0; }
-  .vb-col-head { padding: 4px 10px 10px; display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; }
-  .vb-col-cards { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding: 4px 8px; background: var(--bg2); border:1px solid var(--border); border-radius: 10px; min-height: 120px; }
-  .vb-gate { flex:none; width:36px; display:flex; align-items:center; justify-content:center; position:relative; }
-  .vb-gate .bar { width:2px; height:70%; background:var(--border); border-radius:2px; }
-  .vb-gate .icon { position:absolute; top:50%; transform:translateY(-50%); background:var(--bg); border:1px solid var(--border); border-radius:99px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; font-size:12px; }
-  .vb-card { background: var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; }
-  .vb-card:hover { border-color: var(--accent); }
-  .vb-drawer { position:fixed; top:0; right:0; bottom:0; width:min(480px, 92vw); background:var(--bg2); border-left:1px solid var(--border); box-shadow:-12px 0 40px rgba(0,0,0,.35); z-index:40; display:flex; flex-direction:column; }
-  .vb-overlay-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:50; display:flex; align-items:center; justify-content:center; padding: 4vh 4vw; }
-  .vb-session-modal { width:min(860px,100%); height:min(640px,100%); background:var(--bg); border:1px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+  .vb-col-head { padding: 2px 10px 10px; display:flex; align-items:center; gap:8px; font-weight:600; font-size:12.5px; color: var(--fg2); }
+  .vb-col-cards { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding: 8px; background: var(--panel); border:1px solid var(--border); border-radius: var(--radius); min-height: 120px; }
+  .vb-gate { flex:none; width:34px; display:flex; align-items:center; justify-content:center; position:relative; }
+  .vb-gate .bar { width:1.5px; height:64%; background:var(--border); border-radius:2px; }
+  .vb-gate .icon { position:absolute; top:50%; transform:translateY(-50%); background:var(--panel); border:1px solid var(--border2); border-radius:99px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:11px; }
+  .vb-card { background: var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 13px; cursor:pointer; transition: border-color .15s; }
+  .vb-card:hover { border-color: var(--border2); }
+  .vb-drawer { position:fixed; top:10px; right:10px; bottom:10px; width:min(480px, 92vw); background:var(--panel); border:1px solid var(--border2); border-radius:16px; box-shadow:-16px 0 48px rgba(0,0,0,.45); z-index:40; display:flex; flex-direction:column; overflow:hidden; }
+  .vb-overlay-bg { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:50; display:flex; align-items:center; justify-content:center; padding: 4vh 4vw; }
+  .vb-session-modal { width:min(880px,100%); height:min(660px,100%); background:var(--panel); border:1px solid var(--border2); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; }
 
   /* ---------- Variant C ---------- */
-  .vc { display:grid; grid-template-columns: 250px minmax(340px,1fr) minmax(360px, 44%); height:100%; }
-  .vc-tree { border-right:1px solid var(--border); background:var(--bg2); overflow-y:auto; padding:12px 8px 90px; }
-  .vc-tree .titem { display:flex; align-items:center; gap:7px; width:100%; text-align:left; padding:5px 8px; border-radius:6px; font-size:13px; color:var(--fg2); }
-  .vc-tree .titem:hover { background:var(--bg3); }
-  .vc-tree .titem.active { background:var(--bg3); color:var(--fg); font-weight:600; }
-  .vc-tree .indent1 { padding-left: 22px; } .vc-tree .indent2 { padding-left: 38px; font-size:12px; }
-  .vc-mid { display:flex; flex-direction:column; min-width:0; border-right:1px solid var(--border); overflow-y:auto; padding-bottom:90px; }
-  .vc-rail { flex:none; padding: 14px 18px 8px; }
-  .vc-stage-detail { padding: 8px 18px 20px; }
-  .vc-right { display:flex; flex-direction:column; min-width:0; min-height:0; }
-  .vc-tabs { flex:none; display:flex; border-bottom:1px solid var(--border); overflow-x:auto; background:var(--bg2); }
-  .vc-tab { padding:9px 14px; font-size:12.5px; display:flex; gap:7px; align-items:center; color:var(--fg2); border-right:1px solid var(--border); white-space:nowrap; }
-  .vc-tab.active { background:var(--bg); color:var(--fg); font-weight:600; box-shadow: inset 0 -2px 0 var(--accent); }
-  .vrail { display:flex; flex-direction:column; gap:0; }
-  .vrail .vstage { display:flex; gap:12px; align-items:flex-start; padding:7px 0; cursor:pointer; border-radius:8px; }
-  .vrail .vstage:hover .vslabel { color: var(--fg); }
-  .vrail .vbubble { width:24px; height:24px; flex:none; border-radius:99px; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--fg3); background:var(--bg2); }
-  .vrail .vstage.done .vbubble { background:var(--ok); border-color:var(--ok); color:#fff; }
-  .vrail .vstage.current .vbubble { border-color:var(--accent); color:var(--accent); }
-  .vrail .vslabel { font-size:13px; font-weight:600; color:var(--fg2); padding-top:3px; }
-  .vrail .vstage.selected { background: var(--bg3); margin: 0 -8px; padding-left:8px; padding-right:8px; }
+  .vc { height:100%; display:flex; flex-direction:column; background: var(--bg); }
+  .vc-panes { flex:1; display:grid; grid-template-columns: 256px minmax(340px,1fr) minmax(380px, 44%); min-height:0; }
+  .vc-tree { border-right:1px solid var(--border); background:var(--panel); overflow-y:auto; padding:16px 12px 96px; }
+  .vc-tree .titem { display:flex; align-items:center; gap:8px; width:100%; text-align:left; padding:6px 10px; border-radius:8px; font-size:13px; color:var(--fg2); font-weight:500; }
+  .vc-tree .titem:hover { background:var(--surface2); }
+  .vc-tree .titem.active { background:var(--surface2); color:var(--fg); }
+  .vc-tree .indent1 { padding-left: 26px; } .vc-tree .indent2 { padding-left: 26px; font-size:12.5px; }
+  .vc-mid { display:flex; flex-direction:column; min-width:0; border-right:1px solid var(--border); overflow-y:auto; padding-bottom:96px; }
+  .vc-rail { flex:none; padding: 18px 20px 8px; }
+  .vc-stage-detail { padding: 8px 20px 20px; }
+  .vc-right { display:flex; flex-direction:column; min-width:0; min-height:0; background: var(--panel); }
+  .vc-tabs { flex:none; display:flex; border-bottom:1px solid var(--border); overflow-x:auto; }
+  .vc-tab { padding:10px 15px; font-size:12.5px; display:flex; gap:7px; align-items:center; color:var(--fg3); white-space:nowrap; border-bottom:1.5px solid transparent; font-weight:500; }
+  .vc-tab:hover { color: var(--fg2); }
+  .vc-tab.active { color:var(--fg); font-weight:600; border-bottom-color: var(--mint); }
+  /* vertical rail as a checklist card */
+  .railcard { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; }
+  .vstage { display:flex; gap:11px; align-items:flex-start; padding:9px 10px; cursor:pointer; border-radius:9px; }
+  .vstage:hover { background: var(--surface2); }
+  .vstage.selected { background: var(--surface2); }
+  .vbubble { width:22px; height:22px; flex:none; border-radius:99px; border:1.5px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:600; color:var(--fg3); background:var(--surface); }
+  .vstage.done .vbubble { background: transparent; border-color: var(--mint); color: var(--mint); }
+  .vstage.current .vbubble { border-color: var(--mint); color: var(--mint); }
+  .vstage .vslabel { font-size:13px; font-weight:500; color:var(--fg2); padding-top:1px; }
+  .vstage.done .vslabel { color: var(--fg2); }
+  .vstage.current .vslabel { color: var(--mint); font-weight:600; }
+  .vstage .spinner { display:inline-block; width:11px; height:11px; border:1.5px solid var(--mint); border-right-color:transparent; border-radius:99px; animation: spin .9s linear infinite; margin-right:2px; }
 
   /* ---------- switcher ---------- */
-  #switcher { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:100;
-    display:flex; align-items:center; gap:4px; background:#14171c; color:#eee; border:1px solid #3a4048;
-    border-radius:99px; padding:6px 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); font-size:13px; }
-  [data-theme="light"] #switcher { background:#1f2328; }
-  #switcher .vname { min-width: 230px; text-align:center; font-weight:600; }
-  #switcher .vname small { display:block; font-weight:400; color:#9aa1ab; font-size:11px; }
-  #switcher button { padding:4px 10px; border-radius:99px; color:#eee; }
-  #switcher button:hover { background:#2b3138; }
+  #switcher { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:100;
+    display:flex; align-items:center; gap:4px; background:#101114; color:#e9ebee; border:1px solid #32363e;
+    border-radius:99px; padding:6px 10px; box-shadow: 0 10px 32px rgba(0,0,0,.55); font-size:13px; }
+  #switcher .vname { min-width: 232px; text-align:center; font-weight:600; }
+  #switcher .vname small { display:block; font-weight:400; color:#8b8f97; font-size:11px; }
+  #switcher button { padding:4px 10px; border-radius:99px; }
+  #switcher button:hover { background:#1e2126; }
 </style>
 </head>
 <body>
@@ -165,12 +234,12 @@
 <script>
 /* =============================== mock data =============================== */
 const STAGES = [
-  { key:'setup',      label:'Setup',       icon:'⚙︎' },
-  { key:'planning',   label:'Planning',    icon:'🧭' },
-  { key:'to-spec',    label:'To-Spec',     icon:'📄' },
-  { key:'to-tickets', label:'To-Tickets',  icon:'🎟' },
-  { key:'implement',  label:'Implement',   icon:'⌨︎' },
-  { key:'code-review',label:'Code Review', icon:'🔍' },
+  { key:'setup',      label:'Setup' },
+  { key:'planning',   label:'Planning' },
+  { key:'to-spec',    label:'To-Spec' },
+  { key:'to-tickets', label:'To-Tickets' },
+  { key:'implement',  label:'Implement' },
+  { key:'code-review',label:'Code Review' },
 ];
 
 const WS = { name:'acme-workspace', repos:['acme/api','acme/web','acme/infra'] };
@@ -214,28 +283,24 @@ const SESSIONS = {
 
 const EFFORTS = [
   { id:'e1', name:'Billing v2', homeRepo:'acme/api', repos:['acme/api','acme/web'], stage:4,
-    gates:[true,true,true,true], sessions:['s1','s2'],
-    tickets:{done:4, total:6}, spec:'docs/specs/billing-v2.md', map:'#31',
+    sessions:['s1','s2'], tickets:{done:4, total:6}, spec:'docs/specs/billing-v2.md', map:'#31',
     stageNote:'2 implement sessions running in parallel worktrees. Gate to Code Review locked: 2 tickets still open.' },
   { id:'e2', name:'Onboarding revamp', homeRepo:'acme/web', repos:['acme/web'], stage:1,
-    gates:[true], sessions:['s3'],
-    tickets:{done:0, total:0}, map:'#54',
+    sessions:['s3'], tickets:{done:0, total:0}, map:'#54',
     stageNote:'Wayfinder map has 3 open decisions. Grilling session waiting on you.' },
   { id:'e3', name:'Audit log export', homeRepo:'acme/api', repos:['acme/api','acme/infra'], stage:5,
-    gates:[true,true,true,true,true], sessions:['s4'],
-    tickets:{done:5, total:5}, spec:'docs/specs/audit-log.md', map:'#12',
+    sessions:['s4'], tickets:{done:5, total:5}, spec:'docs/specs/audit-log.md', map:'#12',
     stageNote:'Review session running on PR #88. Merge unlocks effort completion.' },
   { id:'e4', name:'Notifications digest', homeRepo:'acme/api', repos:['acme/api'], stage:0,
-    gates:[], sessions:[],
-    tickets:{done:0, total:0},
+    sessions:[], tickets:{done:0, total:0},
     stageNote:'Repo docs not generated yet — run setup to unlock Planning.' },
 ];
 
 const STATUS_META = {
-  'running':        { dot:'running',  label:'running' },
-  'needs-approval': { dot:'approval', label:'needs approval' },
-  'waiting-human':  { dot:'human',    label:'waiting on you' },
-  'done':           { dot:'done',     label:'done' },
+  'running':        { dot:'running',  label:'Active',      pill:'mint' },
+  'needs-approval': { dot:'approval', label:'Needs you',   pill:'amber' },
+  'waiting-human':  { dot:'human',    label:'Waiting',     pill:'purple' },
+  'done':           { dot:'done',     label:'Done',        pill:'' },
 };
 
 /* =============================== state =============================== */
@@ -247,11 +312,11 @@ const VARIANTS = [
 
 const url = new URL(location.href);
 let state = {
-  variant: url.searchParams.get('variant') || 'A',
+  variant: url.searchParams.get('variant') || 'C',
   theme: url.searchParams.get('theme') || 'dark',
-  nav: { effortId:null, sessionId:null },        // A: drill-down position
-  b: { drawerEffort:null, modalSession:null },   // B
-  c: { effortId:'e1', stageIdx:null, sessionId:'s1' }, // C
+  nav: { effortId:null, sessionId:null },
+  b: { drawerEffort:null, modalSession:null },
+  c: { effortId:'e1', stageIdx:null, sessionId:'s1' },
 };
 
 function setVariant(v){ state.variant=v; syncUrl(); render(); }
@@ -274,11 +339,10 @@ function approve(sessionId, allow){
   if (allow){
     s.transcript.push({role:'tool', text:'$ '+s.pendingApproval.tool+' '+s.pendingApproval.cmd});
     s.transcript.push({role:'agent', text:'12 passed, 0 failed. Pricing grid matches the spec — marking ticket #213 ready for review.'});
-    s.status='running';
   } else {
     s.transcript.push({role:'agent', text:'Understood — skipping the headed browser run. I\'ll rely on the component tests instead.'});
-    s.status='running';
   }
+  s.status='running';
   s.pendingApproval=null;
   render();
 }
@@ -287,15 +351,21 @@ function approve(sessionId, allow){
 const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
 const fmtTok = n => n>=1000 ? Math.round(n/1000)+'k' : n;
 const costBadge = c => `<span class="pill mono" title="tokens in/out">$${c.usd.toFixed(2)} · ${fmtTok(c.in)}▸${fmtTok(c.out)}</span>`;
-const statusPill = st => { const m=STATUS_META[st]; return `<span class="pill ${st==='needs-approval'?'warn':st==='running'?'ok':st==='waiting-human'?'purple':''}"><span class="dot ${m.dot}"></span>${m.label}</span>`; };
+const statusPill = st => { const m=STATUS_META[st]; return `<span class="pill ${m.pill}"><span class="dot ${m.dot}"></span>${m.label}</span>`; };
 const repoChips = repos => repos.map(r=>`<span class="pill mono">${r}</span>`).join(' ');
+const searchBox = () => `<div class="search"><span class="lens">⌕</span><input placeholder="Search…"><kbd>⌘</kbd><kbd>K</kbd></div>`;
+
+function ticksBar(done, total, width=28){
+  const on = total? Math.round(done/total*width) : 0;
+  return `<div class="ticks">${Array.from({length:width},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div>`;
+}
 
 function stepper(e){
   let html = '<div class="stepper">';
   STAGES.forEach((s,i)=>{
     if (i>0){
       const open = i<=e.stage;
-      html += `<div class="gatelink ${open?'open':''}"><span class="gate">${open?'🟢':'🔒'}</span></div>`;
+      html += `<div class="gatelink ${open?'open':''}"><span class="gate">${open?'':'🔒'}</span></div>`;
     }
     const cls = i<e.stage?'done':i===e.stage?'current':'locked';
     html += `<div class="step ${cls}"><div class="bubble">${i<e.stage?'✓':i+1}</div><div class="slabel">${s.label}</div></div>`;
@@ -306,6 +376,7 @@ function stepper(e){
 function transcriptHtml(s){
   return s.transcript.map(m=>{
     if (m.role==='approval') return approvalCard(s);
+    if (m.role==='agent') return `<div class="msg agent"><span class="mark">✦</span><span>${esc(m.text)}</span></div>`;
     return `<div class="msg ${m.role}">${esc(m.text)}</div>`;
   }).join('');
 }
@@ -315,9 +386,9 @@ function approvalCard(s){
     <div style="display:flex;gap:8px;align-items:center"><span class="dot approval"></span><b>Permission request — ${a.tool}</b></div>
     <div class="cmd">${esc(a.cmd)}</div>
     <div class="dim" style="font-size:12.5px">${esc(a.reason)}</div>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn ok sm" onclick="approve('${s.id}',true)">Allow</button>
-      <button class="btn danger-outline sm" onclick="approve('${s.id}',false)">Deny</button>
+    <div style="display:flex;gap:8px;margin-top:11px">
+      <button class="btn primary sm" onclick="approve('${s.id}',true)">Allow</button>
+      <button class="btn danger sm" onclick="approve('${s.id}',false)">Deny</button>
     </div></div>`;
 }
 function chatView(s, {compactHead=false}={}){
@@ -331,12 +402,27 @@ function chatView(s, {compactHead=false}={}){
       ${costBadge(s.cost)}
     </div>
     <div class="chat-scroll">${transcriptHtml(s)}</div>
-    <div class="chat-input"><input placeholder="Message the agent… (prototype — not wired)"><button class="btn primary">Send</button></div>
+    <div class="composer">
+      <div class="hints">
+        <span class="hint"><kbd>⏎</kbd> to send</span>
+        <span class="hint"><kbd>⇧⏎</kbd> new line</span>
+        <span class="hint"><span class="slash">/</span> grill</span>
+        <span class="hint"><span class="slash">/</span> code-review</span>
+      </div>
+      <div class="composer-box">
+        <input class="msgline" placeholder="Message the agent… (prototype — not wired)">
+        <div class="composer-row">
+          <button class="btn sm">+ Attach</button>
+          <span class="spacer"></span>
+          <button class="btn primary sm">Send ↵</button>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 function sessionRow(sid, onclick){
   const s=SESSIONS[sid], m=STATUS_META[s.status];
-  return `<div class="va-session-row" onclick="${onclick}">
+  return `<div class="session-row" onclick="${onclick}">
     <span class="dot ${m.dot}"></span>
     <div style="flex:1;min-width:0">
       <div style="font-weight:600">${s.title}</div>
@@ -349,19 +435,45 @@ function effortCost(e){
   const t = e.sessions.reduce((a,sid)=>a+SESSIONS[sid].cost.usd,0);
   return t?`<span class="pill mono">$${t.toFixed(2)}</span>`:'';
 }
+function wsCost(){
+  const t = Object.values(SESSIONS).reduce((a,s)=>a+s.cost.usd,0);
+  return `<span class="pill mono">Σ $${t.toFixed(2)}</span>`;
+}
 function attention(e){
   const n = e.sessions.filter(sid=>['needs-approval','waiting-human'].includes(SESSIONS[sid].status)).length;
-  return n?`<span class="pill warn">⚑ ${n} needs you</span>`:'';
+  return n?`<span class="pill amber">⚑ ${n} needs you</span>`:'';
+}
+function needsYouChips(onclickFor){
+  return Object.values(SESSIONS)
+    .filter(s=>['needs-approval','waiting-human'].includes(s.status))
+    .map(s=>`<button class="pill ${STATUS_META[s.status].pill}" onclick="${onclickFor(s)}"><span class="dot ${STATUS_META[s.status].dot}"></span>${s.title}</button>`)
+    .join('');
+}
+function topbar(extraLeft=''){
+  return `<div class="topbar">
+    <span class="crumb"><span class="mark">✦</span> ${WS.name}</span>${extraLeft}
+    <span style="flex:1"></span>
+    ${needsYouChips(s=>`jumpTo('${s.effort}','${s.id}')`)}
+    ${wsCost()}
+    <span class="pill solid-mint">threadline dev</span>
+  </div>`;
+}
+function jumpTo(effortId, sessionId){
+  if (state.variant==='A'){ go({effortId, sessionId}); }
+  else if (state.variant==='B'){ state.b.drawerEffort=effortId; state.b.modalSession=sessionId; render(); }
+  else { state.c.effortId=effortId; state.c.sessionId=sessionId; state.c.stageIdx=null; render(); }
 }
 
 /* =============================== Variant A =============================== */
 function renderA(){
   const {effortId, sessionId} = state.nav;
   const side = `<div class="va-side">
-    <div class="wsname">🧵 ${WS.name}</div>
+    <div class="brand"><span class="mark">✦</span> threadline
+      <span class="actions"><button title="settings">⚙</button><button title="collapse">▤</button></span></div>
+    ${searchBox()}
     <div class="navsec">Efforts</div>
     ${EFFORTS.map(e=>`<button class="navitem ${effortId===e.id?'active':''}" onclick="go({effortId:'${e.id}',sessionId:null})">
-      <span style="flex:1;text-align:left">${e.name}</span><span class="dimmer" style="font-size:11px">${STAGES[e.stage].label}</span></button>`).join('')}
+      <span style="flex:1;text-align:left">${e.name}</span><span class="count">${STAGES[e.stage].label}</span></button>`).join('')}
     <div class="navsec">Repos</div>
     ${WS.repos.map(r=>`<button class="navitem"><span class="mono">${r}</span></button>`).join('')}
     <div class="navsec">Needs you</div>
@@ -374,54 +486,56 @@ function renderA(){
   if (sessionId){
     const s=SESSIONS[sessionId], e=EFFORTS.find(x=>x.id===s.effort);
     crumbs = `<button onclick="go({effortId:null,sessionId:null})">Dashboard</button> / <button onclick="go({sessionId:null})">${e.name}</button> / <span style="color:var(--fg)">${s.title}</span>`;
-    body = `<div class="card va-chatwrap" style="margin-top:12px">${chatView(s)}</div>`;
+    body = `<div class="card va-chatwrap">${chatView(s)}</div>`;
   } else if (effortId){
     const e=EFFORTS.find(x=>x.id===effortId);
     crumbs = `<button onclick="go({effortId:null,sessionId:null})">Dashboard</button> / <span style="color:var(--fg)">${e.name}</span>`;
     body = `
-      <div style="display:flex;align-items:center;gap:12px;margin:10px 0 4px"><h2>${e.name}</h2>${repoChips(e.repos)}${attention(e)}<span style="flex:1"></span>${effortCost(e)}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:10px 0 4px"><h2>${e.name}</h2>${repoChips(e.repos)}${attention(e)}<span style="flex:1"></span>${effortCost(e)}</div>
       <div class="card" style="padding:18px 20px;margin-top:10px">${stepper(e)}
         <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
-          <span class="pill accent">Current: ${STAGES[e.stage].label}</span>
+          <span class="pill mint">${STAGES[e.stage].label}</span>
           <span class="dim" style="font-size:13px">${e.stageNote}</span>
           <span style="flex:1"></span><button class="btn sm">Override gate ▸</button>
         </div>
-        ${e.spec?`<div class="dimmer mono" style="margin-top:10px">spec: ${e.spec} · map: ${e.map} · tickets ${e.tickets.done}/${e.tickets.total}</div>`:''}
+        ${e.tickets.total?`<div style="display:flex;gap:12px;align-items:center;margin-top:14px"><span class="dimmer mono">tickets ${e.tickets.done}/${e.tickets.total}</span><div style="flex:0 0 220px">${ticksBar(e.tickets.done,e.tickets.total)}</div></div>`:''}
+        ${e.spec?`<div class="dimmer mono" style="margin-top:10px">spec: ${e.spec} · map: ${e.map}</div>`:''}
       </div>
       <h3 style="margin:20px 0 8px">Sessions</h3>
       <div class="card">${e.sessions.length? e.sessions.map(sid=>sessionRow(sid,`go({sessionId:'${sid}'})`)).join('') : '<div class="dim" style="padding:16px">No sessions yet — the current stage starts one.</div>'}</div>
-      <div style="margin-top:12px"><button class="btn primary">▶ Start ${STAGES[e.stage].label} session</button></div>`;
+      <div style="margin-top:14px"><button class="btn primary">▶ Start ${STAGES[e.stage].label} session</button></div>`;
   } else {
     crumbs = `<span style="color:var(--fg)">Dashboard</span>`;
     body = `<div style="display:flex;align-items:baseline;gap:12px;margin-top:8px"><h2>Efforts</h2><span class="dim">${EFFORTS.length} across ${WS.repos.length} repos</span></div>
       <div class="va-effort-grid">
       ${EFFORTS.map(e=>`<div class="card va-effort-card" onclick="go({effortId:'${e.id}'})">
-        <div style="display:flex;align-items:center;gap:10px"><b style="font-size:15px">${e.name}</b><span style="flex:1"></span>${attention(e)}</div>
+        <div style="display:flex;align-items:center;gap:10px"><b style="font-size:14.5px">${e.name}</b><span style="flex:1"></span>${attention(e)}</div>
         <div style="margin:8px 0 2px">${repoChips(e.repos)}</div>
         <div style="transform:scale(.82);transform-origin:left">${stepper(e)}</div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-          <span class="pill accent">${STAGES[e.stage].label}</span>
+          <span class="pill mint">${STAGES[e.stage].label}</span>
           <span class="dimmer" style="font-size:12px">${e.sessions.length} session${e.sessions.length===1?'':'s'}</span>
           <span style="flex:1"></span>${effortCost(e)}</div>
       </div>`).join('')}</div>`;
   }
-  return `<div class="va">${side}<div class="va-main"><div class="va-crumbs">${crumbs}</div><div class="va-body">${body}</div></div></div>`;
+  return `<div class="va">${side}<div class="va-main">${topbar()}<div class="va-crumbs">${crumbs}</div><div class="va-body">${body}</div></div></div>`;
 }
 
 /* =============================== Variant B =============================== */
 function renderB(){
   const cols = STAGES.map((st,i)=>{
-    const cards = EFFORTS.filter(e=>e.stage===i).map(e=>`
+    const here = EFFORTS.filter(e=>e.stage===i);
+    const cards = here.map(e=>`
       <div class="vb-card" onclick="state.b.drawerEffort='${e.id}';render()">
         <div style="display:flex;gap:8px;align-items:center"><b>${e.name}</b><span style="flex:1"></span>${attention(e)}</div>
-        <div style="margin-top:6px">${repoChips(e.repos)}</div>
-        <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+        <div style="margin-top:7px">${repoChips(e.repos)}</div>
+        <div style="display:flex;gap:6px;margin-top:9px;align-items:center">
           ${e.sessions.map(sid=>`<span class="dot ${STATUS_META[SESSIONS[sid].status].dot}" title="${SESSIONS[sid].title}"></span>`).join('')}
           <span class="dimmer" style="font-size:11px">${e.sessions.length?e.sessions.length+' session'+(e.sessions.length===1?'':'s'):'idle'}</span>
           <span style="flex:1"></span>${effortCost(e)}</div>
       </div>`).join('');
     const col = `<div class="vb-col">
-      <div class="vb-col-head"><span>${st.icon}</span> ${st.label} <span class="dimmer" style="font-weight:400">${EFFORTS.filter(e=>e.stage===i).length||''}</span></div>
+      <div class="vb-col-head">${st.label} <span class="dimmer" style="font-weight:400">${here.length||''}</span></div>
       <div class="vb-col-cards">${cards||'<div class="dimmer" style="padding:10px;font-size:12px;text-align:center">—</div>'}</div>
     </div>`;
     const gate = i<STAGES.length-1 ? `<div class="vb-gate"><div class="bar"></div><div class="icon" title="gate: ${st.label} → ${STAGES[i+1].label}">🔒</div></div>` : '';
@@ -433,7 +547,7 @@ function renderB(){
     const e=EFFORTS.find(x=>x.id===state.b.drawerEffort);
     drawer = `<div class="vb-drawer">
       <div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
-        <b style="font-size:15px">${e.name}</b><span class="pill accent">${STAGES[e.stage].label}</span><span style="flex:1"></span>
+        <b style="font-size:15px">${e.name}</b><span class="pill mint">${STAGES[e.stage].label}</span><span style="flex:1"></span>
         <button class="btn sm" onclick="state.b.drawerEffort=null;render()">✕</button></div>
       <div style="padding:14px 18px;overflow-y:auto;flex:1">
         <div>${repoChips(e.repos)} ${effortCost(e)}</div>
@@ -442,7 +556,7 @@ function renderB(){
         ${e.spec?`<div class="dimmer mono" style="margin-bottom:14px">spec: ${e.spec} · map: ${e.map} · tickets ${e.tickets.done}/${e.tickets.total}</div>`:''}
         <h3 style="margin-bottom:8px">Sessions</h3>
         <div class="card">${e.sessions.length? e.sessions.map(sid=>sessionRow(sid,`state.b.modalSession='${sid}';render()`)).join('') : '<div class="dim" style="padding:14px">No sessions yet.</div>'}</div>
-        <div style="margin-top:12px;display:flex;gap:8px"><button class="btn primary">▶ Start ${STAGES[e.stage].label} session</button><button class="btn">Override gate ▸</button></div>
+        <div style="margin-top:12px;display:flex;gap:8px"><button class="btn primary sm">▶ Start ${STAGES[e.stage].label} session</button><button class="btn sm">Override gate ▸</button></div>
       </div></div>`;
   }
   if (state.b.modalSession){
@@ -454,12 +568,7 @@ function renderB(){
         ${chatView(s,{compactHead:true})}
       </div></div>`;
   }
-  const needsYou = Object.values(SESSIONS).filter(s=>['needs-approval','waiting-human'].includes(s.status));
-  return `<div class="vb">
-    <div class="vb-top"><b style="font-size:15px">🧵 ${WS.name}</b><span class="dim">pipeline board</span><span style="flex:1"></span>
-      ${needsYou.map(s=>`<button class="pill warn" onclick="state.b.drawerEffort='${s.effort}';state.b.modalSession='${s.id}';render()"><span class="dot ${STATUS_META[s.status].dot}"></span>${s.title}</button>`).join('')}
-    </div>
-    <div class="vb-board">${cols}</div>${drawer}${modal}</div>`;
+  return `<div class="vb">${topbar('<span class="pill">pipeline board</span>')}<div class="vb-board">${cols}</div>${drawer}${modal}</div>`;
 }
 
 /* =============================== Variant C =============================== */
@@ -467,40 +576,46 @@ function renderC(){
   const c = state.c;
   const eff = EFFORTS.find(x=>x.id===c.effortId) || EFFORTS[0];
   const tree = `<div class="vc-tree">
-    <div class="titem" style="font-weight:700;color:var(--fg)">🧵 ${WS.name}</div>
+    <div class="brand"><span class="mark">✦</span> threadline
+      <span class="actions"><button title="settings">⚙</button><button title="collapse">▤</button></span></div>
+    ${searchBox()}
+    <div class="navsec">Efforts</div>
     ${EFFORTS.map(e=>`
       <button class="titem ${c.effortId===e.id?'active':''}" onclick="state.c.effortId='${e.id}';state.c.stageIdx=null;state.c.sessionId='${e.sessions[0]||''}';render()">
-        <span>${c.effortId===e.id?'▾':'▸'}</span><span style="flex:1;text-align:left">${e.name}</span>${attention(e)}</button>
+        <span class="dimmer">${c.effortId===e.id?'▾':'▸'}</span><span style="flex:1;text-align:left">${e.name}</span>${attention(e)}</button>
       ${c.effortId===e.id ? e.repos.map(r=>`<div class="titem indent1 mono dimmer">${r}</div>`).join('') +
         e.sessions.map(sid=>{const s=SESSIONS[sid];return `<button class="titem indent2 ${c.sessionId===sid?'active':''}" onclick="state.c.sessionId='${sid}';render()">
           <span class="dot ${STATUS_META[s.status].dot}"></span><span style="flex:1;text-align:left">${s.title}</span></button>`;}).join('') : ''}`).join('')}
+    <div class="navsec">Needs you</div>
+    ${Object.values(SESSIONS).filter(s=>['needs-approval','waiting-human'].includes(s.status)).map(s=>
+      `<button class="titem" onclick="jumpTo('${s.effort}','${s.id}')">
+        <span class="dot ${STATUS_META[s.status].dot}"></span><span style="flex:1;text-align:left">${s.title}</span></button>`).join('')}
   </div>`;
 
   const stageIdx = c.stageIdx ?? eff.stage;
   const rail = `<div class="vc-rail">
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><h2>${eff.name}</h2>${repoChips(eff.repos)}<span style="flex:1"></span>${effortCost(eff)}</div>
-    <div class="vrail">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><h2>${eff.name}</h2>${repoChips(eff.repos)}<span style="flex:1"></span>${effortCost(eff)}</div>
+    <div class="railcard">
     ${STAGES.map((s,i)=>{
       const cls = (i<eff.stage?'done':i===eff.stage?'current':'') + (i===stageIdx?' selected':'');
-      const gate = i>0 ? (i<=eff.stage?'🟢 ':'🔒 ') : '';
       return `<div class="vstage ${cls}" onclick="state.c.stageIdx=${i};render()">
-        <div class="vbubble">${i<eff.stage?'✓':i+1}</div>
-        <div style="flex:1"><div class="vslabel">${gate}${s.label}</div>
-        ${i===eff.stage?`<div class="dim" style="font-size:12px">${eff.stageNote}</div>`:''}</div></div>`;
+        <div class="vbubble">${i<eff.stage?'✓':i===eff.stage?'':'🔒'}</div>
+        <div style="flex:1"><div class="vslabel">${i===eff.stage?'<span class="spinner"></span> ':''}${s.label}</div>
+        ${i===eff.stage?`<div class="dim" style="font-size:12px;margin-top:2px">${eff.stageNote}</div>`:''}</div></div>`;
     }).join('')}</div></div>`;
 
   const st = STAGES[stageIdx];
   const locked = stageIdx>eff.stage;
   const detail = `<div class="vc-stage-detail">
     <div class="card" style="padding:14px 16px">
-      <div style="display:flex;gap:10px;align-items:center"><b>${st.icon} ${st.label}</b>
-        ${stageIdx<eff.stage?'<span class="pill ok">passed</span>':stageIdx===eff.stage?'<span class="pill accent">current</span>':'<span class="pill">🔒 locked</span>'}
+      <div style="display:flex;gap:10px;align-items:center"><b>${st.label}</b>
+        ${stageIdx<eff.stage?'<span class="pill mint">Done</span>':stageIdx===eff.stage?'<span class="pill blue">In Progress</span>':'<span class="pill">🔒 Locked</span>'}
         <span style="flex:1"></span>${locked?'<button class="btn sm">Override ▸</button>':`<button class="btn primary sm">▶ Start session</button>`}</div>
-      <p class="dim" style="font-size:13px;margin-top:8px">${
+      <p class="dim" style="font-size:13px;margin-top:9px">${
         locked ? `Unlocks when ${STAGES[stageIdx-1].label} exit condition is met.` :
         stageIdx<eff.stage ? 'Exit condition met — artifacts recorded on the tracker.' : eff.stageNote}</p>
-      ${eff.spec && stageIdx===2?`<div class="dimmer mono" style="margin-top:8px">spec: ${eff.spec}</div>`:''}
-      ${stageIdx===3&&eff.tickets.total?`<div class="dimmer mono" style="margin-top:8px">tickets ${eff.tickets.done}/${eff.tickets.total} closed</div>`:''}
+      ${eff.tickets.total && stageIdx>=3 ?`<div style="display:flex;gap:12px;align-items:center;margin-top:12px"><span class="dimmer mono">tickets ${eff.tickets.done}/${eff.tickets.total}</span><div style="flex:0 0 200px">${ticksBar(eff.tickets.done,eff.tickets.total)}</div></div>`:''}
+      ${eff.spec && stageIdx===2?`<div class="dimmer mono" style="margin-top:10px">spec: ${eff.spec}</div>`:''}
     </div></div>`;
 
   const openSessions = Object.values(SESSIONS).filter(s=>s.effort===eff.id);
@@ -513,7 +628,7 @@ function renderC(){
     ${cur? chatView(cur,{compactHead:true}) : '<div class="dim" style="padding:24px">Start a session to see it here.</div>'}
   </div>`;
 
-  return `<div class="vc">${tree}<div class="vc-mid">${rail}${detail}</div>${right}</div>`;
+  return `<div class="vc">${topbar()}<div class="vc-panes">${tree}<div class="vc-mid">${rail}${detail}</div>${right}</div></div>`;
 }
 
 /* =============================== switcher + boot =============================== */
