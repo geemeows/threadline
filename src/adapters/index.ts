@@ -1,3 +1,3 @@
-// Agent and tracker adapter seams live here.
-// ClaudeCodeAdapter (issue #12) and TrackerAdapter (issue #21) land in this module.
-export {}
+export * from './types.js'
+export { ClaudeCodeAdapter, buildArgs } from './claude-code.js'
+export type { ClaudeCodeAdapterOptions, SpawnFn } from './claude-code.js'
