@@ -107,3 +107,19 @@ describe('deriveStage', () => {
     expect(snap.readyToComplete).toBe(true)
   })
 })
+
+describe('warnings', () => {
+  it('surfaces a missing Ticket reference as a warning, never a gate condition', () => {
+    const snap = deriveStage(
+      inputs({
+        tickets: [
+          ticket(2, { pr: pr({ missingTicketRef: true }) }),
+          ticket(3, { pr: pr() }),
+          ticket(4, { pr: pr({ state: 'closed', missingTicketRef: true }) }), // abandoned — ignored
+        ],
+      }),
+    )
+    expect(snap.warnings).toEqual(['o/r#2\'s PR body is missing its "Ticket: #<n>" reference'])
+    expect(snap.gates.flatMap((g) => g.unmet).join()).not.toContain('Ticket:')
+  })
+})

@@ -1,6 +1,12 @@
 export * from './types.js'
 export { deriveStage, overrideStamp } from './derive.js'
-export { refSlug, ticketBranch, trunkBranch } from './branches.js'
+export {
+  refSlug,
+  githubIssueNumber,
+  ticketIdToken,
+  ticketBranchPattern,
+  trunkBranch,
+} from './branches.js'
 export { gatherGateInputs, type GatherDeps } from './inputs.js'
 export {
   applyOverride,

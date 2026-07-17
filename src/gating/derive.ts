@@ -15,7 +15,15 @@ export function deriveStage(inputs: GateInputs): StageSnapshot {
     stage: firstUnpassed?.stage ?? 'code-review',
     gates,
     readyToComplete: firstUnpassed === undefined,
+    warnings: collectWarnings(inputs),
   }
+}
+
+/** Needs-you notices that never block a gate (#26's `Ticket: #<n>` backstop). */
+function collectWarnings(inputs: GateInputs): string[] {
+  return inputs.tickets
+    .filter((t) => t.pr && t.pr.state !== 'closed' && t.pr.missingTicketRef)
+    .map((t) => `${t.ref.display}'s PR body is missing its "Ticket: #<n>" reference`)
 }
 
 function evaluateGate(stage: Stage, inputs: GateInputs): GateStatus {

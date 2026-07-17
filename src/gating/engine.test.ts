@@ -6,7 +6,7 @@ import type {
   TicketRef,
   TrackerAdapter,
 } from '../tracker/types.js'
-import { refSlug, ticketBranch, trunkBranch } from './branches.js'
+import { refSlug, ticketBranchPattern, trunkBranch } from './branches.js'
 import { computeStage, watchEffort } from './watch.js'
 import { applyOverride, formatOverrideComment, revokeOverride } from './override.js'
 import type { PRInfo, PRSource } from './types.js'
@@ -70,11 +70,11 @@ class FakeTracker implements TrackerAdapter {
 }
 
 class FakePRSource implements PRSource {
-  calls: { repoDir: string; branch: string; trunk: string }[] = []
-  byBranch = new Map<string, PRInfo | null>()
-  async ticketPR(repoDir: string, branch: string, trunk: string) {
-    this.calls.push({ repoDir, branch, trunk })
-    return this.byBranch.get(branch) ?? null
+  calls: { repoDir: string; ticketId: string; trunk: string }[] = []
+  byTicket = new Map<string, PRInfo | null>()
+  async ticketPR(repoDir: string, ticket: TicketRef, trunk: string) {
+    this.calls.push({ repoDir, ticketId: ticket.id, trunk })
+    return this.byTicket.get(ticket.id) ?? null
   }
 }
 
@@ -86,12 +86,12 @@ describe('branch conventions', () => {
   it('slugs GitHub refs and passes UUIDs through', () => {
     expect(refSlug(ref('o/repo#42'))).toBe('o-repo-42')
     expect(refSlug(ref('A1B2-c3d4'))).toBe('a1b2-c3d4')
-    expect(ticketBranch(ref('o/repo#42'))).toBe('tl/o-repo-42')
+    expect(ticketBranchPattern(ref('o/repo#42')).test('tm/feat/42-add-thing')).toBe(true)
   })
 
   it('trunk uses the map number, falling back to the slug', () => {
-    expect(trunkBranch(ref('o/home#7', 'o/home#7'))).toBe('tl/effort/7')
-    expect(trunkBranch(ref('uuid-123', 'ENG-45'))).toBe('tl/effort/uuid-123')
+    expect(trunkBranch(ref('o/home#7', 'o/home#7'))).toBe('tm/effort/7')
+    expect(trunkBranch(ref('uuid-123', 'ENG-45'))).toBe('tm/effort/uuid-123')
   })
 })
 
@@ -103,12 +103,12 @@ describe('computeStage wiring', () => {
       { ref: ref('o/repo#3'), state: 'closed' },
     ]
     const prs = new FakePRSource()
-    prs.byBranch.set('tl/o-repo-2', { url: 'u', state: 'open', unresolvedReviewThreads: 0 })
+    prs.byTicket.set('o/repo#2', { url: 'u', state: 'open', unresolvedReviewThreads: 0 })
 
     const snap = await computeStage(deps(tracker, prs), effort)
     expect(prs.calls).toEqual([
-      { repoDir: '/ws/o/repo', branch: 'tl/o-repo-2', trunk: 'tl/effort/1' },
-      { repoDir: '/ws/o/repo', branch: 'tl/o-repo-3', trunk: 'tl/effort/1' },
+      { repoDir: '/ws/o/repo', ticketId: 'o/repo#2', trunk: 'tm/effort/1' },
+      { repoDir: '/ws/o/repo', ticketId: 'o/repo#3', trunk: 'tm/effort/1' },
     ])
     expect(snap.stage).toBe('implement')
     expect(snap.gates[3]!.unmet).toEqual(['o/repo#3 has no PR targeting the effort trunk'])
@@ -133,7 +133,7 @@ describe('watchEffort', () => {
       seen.push(snap.stage)
       if (seen.length === 1) {
         // after first yield, let the ticket gain a PR before the next changed poll
-        prs.byBranch.set('tl/o-repo-2', { url: 'u', state: 'open', unresolvedReviewThreads: 0 })
+        prs.byTicket.set('o/repo#2', { url: 'u', state: 'open', unresolvedReviewThreads: 0 })
       }
       if (seen.length === 2) ac.abort()
     }
@@ -153,7 +153,7 @@ describe('watchEffort', () => {
       prRefreshIntervalMs: 2, // ≤ poll interval → refresh every poll
     })) {
       seen.push(snap.stage)
-      prs.byBranch.set('tl/o-repo-2', { url: 'u', state: 'open', unresolvedReviewThreads: 0 })
+      prs.byTicket.set('o/repo#2', { url: 'u', state: 'open', unresolvedReviewThreads: 0 })
       if (seen.length === 2) ac.abort()
     }
     expect(seen).toEqual(['implement', 'code-review'])

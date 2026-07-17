@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import type { TicketRef } from '../tracker/types.js'
 import { countUnresolved, GhPrSource, pickPR, type GhExec } from './gh-pr-source.js'
 
+function ref(id: string, display = id): TicketRef {
+  return { id, display, url: `https://example.test/${id}` }
+}
+
+function ghPr(over: Partial<Parameters<typeof pickPR>[0][number]>) {
+  return { number: 1, url: 'u', state: 'OPEN' as const, headRefName: 'tm/feat/1-x', body: '', ...over }
+}
+
 describe('pickPR', () => {
-  const open = { number: 1, url: 'u1', state: 'OPEN' as const }
-  const merged = { number: 2, url: 'u2', state: 'MERGED' as const }
-  const closed = { number: 3, url: 'u3', state: 'CLOSED' as const }
+  const open = ghPr({ number: 1, url: 'u1', state: 'OPEN' })
+  const merged = ghPr({ number: 2, url: 'u2', state: 'MERGED' })
+  const closed = ghPr({ number: 3, url: 'u3', state: 'CLOSED' })
 
   it('prefers open over merged over abandoned', () => {
     expect(pickPR([closed, merged, open])).toBe(open)
@@ -31,37 +40,60 @@ describe('countUnresolved', () => {
 })
 
 describe('GhPrSource', () => {
-  it('lists PRs by head+base in the repo dir and fetches threads for live PRs', async () => {
+  it('lists PRs by trunk base, matches the ticket branch by regex, and fetches threads for live PRs', async () => {
     const calls: string[][] = []
     const exec: GhExec = async (args, repoDir) => {
       calls.push([repoDir, ...args])
       if (args[0] === 'pr')
-        return JSON.stringify([{ number: 7, url: 'https://x/pull/7', state: 'OPEN' }])
+        return JSON.stringify([
+          ghPr({ number: 9, url: 'other', headRefName: 'tm/feat/20-unrelated' }),
+          ghPr({ number: 7, url: 'https://x/pull/7', headRefName: 'tm/fix/2-crash', body: 'Ticket: #2' }),
+        ])
       return JSON.stringify({
         data: { repository: { pullRequest: { reviewThreads: { nodes: [{ isResolved: false }] } } } },
       })
     }
-    const pr = await new GhPrSource(exec).ticketPR('/ws/repo', 'tl/o-repo-2', 'tl/effort/1')
+    const pr = await new GhPrSource(exec).ticketPR('/ws/repo', ref('o/repo#2'), 'tm/effort/1')
     expect(pr).toEqual({ url: 'https://x/pull/7', state: 'open', unresolvedReviewThreads: 1 })
     expect(calls[0]).toEqual([
-      '/ws/repo', 'pr', 'list', '--head', 'tl/o-repo-2', '--base', 'tl/effort/1',
-      '--state', 'all', '--json', 'number,url,state', '--limit', '20',
+      '/ws/repo', 'pr', 'list', '--base', 'tm/effort/1', '--state', 'all',
+      '--json', 'number,url,state,headRefName,body', '--limit', '100',
     ])
     expect(calls[1]![0]).toBe('/ws/repo')
     expect(calls[1]).toContain('graphql')
     expect(calls[1]).toContain('number=7')
   })
 
-  it('returns null when no PR exists and skips threads for abandoned PRs', async () => {
+  it('flags a GitHub ticket PR whose body lacks the Ticket: #<n> reference', async () => {
+    const exec: GhExec = async (args) => {
+      if (args[0] === 'pr')
+        return JSON.stringify([ghPr({ number: 7, headRefName: 'tm/fix/2-crash', body: 'no reference here' })])
+      return JSON.stringify({})
+    }
+    const pr = await new GhPrSource(exec).ticketPR('/r', ref('o/repo#2'), 'tm/effort/1')
+    expect(pr?.missingTicketRef).toBe(true)
+  })
+
+  it('never flags Linear tickets — linkage rides the branch name', async () => {
+    const exec: GhExec = async (args) => {
+      if (args[0] === 'pr')
+        return JSON.stringify([ghPr({ number: 7, headRefName: 'tm/feat/FE-12-thing', body: '' })])
+      return JSON.stringify({})
+    }
+    const pr = await new GhPrSource(exec).ticketPR('/r', ref('uuid-abc', 'FE-12'), 'tm/effort/1')
+    expect(pr?.missingTicketRef).toBeUndefined()
+  })
+
+  it('returns null when no PR matches and skips threads for abandoned PRs', async () => {
     const none = new GhPrSource(async () => '[]')
-    expect(await none.ticketPR('/r', 'b', 't')).toBeNull()
+    expect(await none.ticketPR('/r', ref('o/repo#2'), 'tm/effort/1')).toBeNull()
 
     let graphqlCalled = false
     const abandoned = new GhPrSource(async (args) => {
       if (args[0] === 'api') graphqlCalled = true
-      return JSON.stringify([{ number: 7, url: 'u', state: 'CLOSED' }])
+      return JSON.stringify([ghPr({ number: 7, state: 'CLOSED', headRefName: 'tm/fix/2', body: 'Ticket: #2' })])
     })
-    expect(await abandoned.ticketPR('/r', 'b', 't')).toEqual({
+    expect(await abandoned.ticketPR('/r', ref('o/repo#2'), 'tm/effort/1')).toEqual({
       url: 'u',
       state: 'closed',
       unresolvedReviewThreads: 0,
