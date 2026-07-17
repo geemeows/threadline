@@ -13,6 +13,7 @@ import {
   installSkills,
   listTeams,
   planDocs,
+  provisionGitHub,
   provisionLinear,
   readConfig,
   storeLinearKey,
@@ -160,6 +161,17 @@ export function createSetupApp(deps: SetupRouteDeps): Hono {
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502)
     }
+  })
+
+  // Vocabulary labels stamped into every confirmed repo (#43) — symmetric
+  // with /linear/provision; idempotent via `gh label create --force`.
+  app.post('/github/provision', async (c) => {
+    const config = await readConfig(workspace.root)
+    const repos = confirmedRepos(workspace, config)
+    if (repos.length === 0) return c.json({ error: 'no confirmed repos' }, 400)
+    // Always 200 — per-repo failures ride the results' ok/detail, so the
+    // panel can show exactly which repos still need provisioning.
+    return c.json({ repos: await provisionGitHub(repos, exec) })
   })
 
   app.post('/skills/install', async (c) => {

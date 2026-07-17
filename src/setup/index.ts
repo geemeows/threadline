@@ -1,5 +1,6 @@
 export { configPath, readConfig, writeConfig, type WorkspaceConfig } from './config.js'
 export { defaultExec, type Exec } from './exec.js'
+export { labelColor, provisionGitHub, type GitHubProvisionResult } from './github.js'
 export {
   VOCABULARY_LABELS,
   createTeam,

@@ -9,6 +9,9 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { LinearClient } from '../tracker/linear-client.js'
+import { VOCABULARY_LABELS } from '../tracker/labels.js'
+
+export { VOCABULARY_LABELS }
 
 export interface LinearOrgInfo {
   orgId: string
@@ -21,23 +24,6 @@ export interface LinearTeam {
   key: string
   name: string
 }
-
-/** The full label vocabulary threadline stamps and queries (flat, colon-safe). */
-export const VOCABULARY_LABELS = [
-  'wayfinder:map',
-  'wayfinder:research',
-  'wayfinder:prototype',
-  'wayfinder:grilling',
-  'wayfinder:task',
-  'threadline:ticket',
-  'threadline:spec',
-  'threadline:ticketed',
-  'threadline:override:planning',
-  'threadline:override:to-spec',
-  'threadline:override:to-tickets',
-  'threadline:override:implement',
-  'threadline:override:code-review',
-]
 
 /** Throws (LinearApiError) on a bad key — the wizard shows the message inline. */
 export async function validateLinearKey(client: LinearClient): Promise<LinearOrgInfo> {
