@@ -42,6 +42,8 @@ export async function loadTrackerConfig(root: string): Promise<TrackerConfig> {
 
 export interface StageService {
   snapshot(effortId: string): Promise<StageSnapshot>
+  /** Drop the cached snapshot after a state-changing write (e.g. an override stamp). */
+  invalidate(effortId: string): void
 }
 
 export interface StageServiceOptions {
@@ -99,7 +101,26 @@ export async function createStageService(
       cache.set(effortId, { at: Date.now(), snapshot })
       return snapshot
     },
+    invalidate(effortId: string): void {
+      cache.delete(effortId)
+    },
   }
+}
+
+/**
+ * Identity for override audit comments (#40): the gh login (PRs — and GitHub
+ * comments — carry it anyway, even in Linear workspaces), falling back to the
+ * OS username when gh isn't authed.
+ */
+export async function trackerWhoami(root: string, ghExec: GhExec = defaultGhExec): Promise<string> {
+  try {
+    const login = (await ghExec(['api', 'user', '--jq', '.login'], root)).trim()
+    if (login) return login
+  } catch {
+    // fall through to the OS username
+  }
+  const { userInfo } = await import('node:os')
+  return userInfo().username
 }
 
 function mintEffortRef(tracker: 'github' | 'linear', id: string): TicketRef {

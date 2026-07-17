@@ -1,9 +1,39 @@
 import { describe, expect, it } from 'vitest'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
-import { createPipelineApp } from './pipeline-routes.js'
+import { createPipelineApp, type OverrideContext } from './pipeline-routes.js'
 
-function appWith(orchestrator: Partial<PipelineOrchestrator>) {
-  return createPipelineApp({ orchestrator: async () => orchestrator as PipelineOrchestrator })
+function appWith(orchestrator: Partial<PipelineOrchestrator>, overrides?: Partial<OverrideContext>) {
+  return createPipelineApp({
+    orchestrator: async () => orchestrator as PipelineOrchestrator,
+    overrides: async () => overrides as OverrideContext,
+  })
+}
+
+/** Override context over a recording fake tracker. */
+function fakeOverrides() {
+  const comments: string[] = []
+  const stamps: string[] = []
+  const unstamps: string[] = []
+  const invalidated: string[] = []
+  const ctx: Partial<OverrideContext> = {
+    tracker: {
+      comment: async (_ref: unknown, md: string) => void comments.push(md),
+      stamp: async (_ref: unknown, name: string) => void stamps.push(name),
+      unstamp: async (_ref: unknown, name: string) => void unstamps.push(name),
+    } as never,
+    mintEffortRef: (id) => ({ id, display: id, url: '' }),
+    snapshot: async () =>
+      ({
+        stage: 'to-spec',
+        gates: [{ stage: 'to-spec', met: false, overridden: false, unmet: ['no closed spec sub-issue'] }],
+        tickets: [],
+        readyToComplete: false,
+        warnings: [],
+      }) as never,
+    invalidate: (effortId) => void invalidated.push(effortId),
+    whoami: async () => 'geemeows',
+  }
+  return { ctx, comments, stamps, unstamps, invalidated }
 }
 
 const post = (app: ReturnType<typeof createPipelineApp>, path: string, body: unknown) =>
@@ -58,5 +88,53 @@ describe('pipeline routes', () => {
     })
     await post(app, '/complete', { effort: 'o/home#1', force: true })
     expect(seen).toEqual([{ force: true }])
+  })
+
+  it('applies an override: audit comment first, then the stamp, then cache invalidation', async () => {
+    const { ctx, comments, stamps, invalidated } = fakeOverrides()
+    const app = appWith({}, ctx)
+    const res = await post(app, '/override', { effort: 'o/home#1', stage: 'to-spec', reason: 'demo cut' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ overridden: true })
+    expect(stamps).toEqual(['override:to-spec'])
+    expect(comments[0]).toContain('## Override: to-spec')
+    expect(comments[0]).toContain('- **Who**: geemeows')
+    expect(comments[0]).toContain('no closed spec sub-issue')
+    expect(comments[0]).toContain('- **Reason**: demo cut')
+    expect(invalidated).toEqual(['o/home#1'])
+  })
+
+  it('rejects an override without a reason or with an unknown stage', async () => {
+    const { ctx, stamps } = fakeOverrides()
+    const app = appWith({}, ctx)
+    expect((await post(app, '/override', { effort: 'o/home#1', stage: 'to-spec' })).status).toBe(400)
+    expect((await post(app, '/override', { effort: 'o/home#1', stage: 'to-spec', reason: '  ' })).status).toBe(400)
+    expect((await post(app, '/override', { effort: 'o/home#1', stage: 'setup', reason: 'x' })).status).toBe(400)
+    expect((await post(app, '/override', { stage: 'to-spec', reason: 'x' })).status).toBe(400)
+    expect(stamps).toEqual([])
+  })
+
+  it('revokes an override: audit comment plus unstamp', async () => {
+    const { ctx, comments, unstamps, invalidated } = fakeOverrides()
+    const app = appWith({}, ctx)
+    const res = await post(app, '/override/revoke', { effort: 'o/home#1', stage: 'to-spec' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ revoked: true })
+    expect(unstamps).toEqual(['override:to-spec'])
+    expect(comments[0]).toContain('## Override revoked: to-spec')
+    expect(invalidated).toEqual(['o/home#1'])
+  })
+
+  it('502s with the tracker error message on a failed override write', async () => {
+    const { ctx } = fakeOverrides()
+    ctx.tracker = {
+      comment: async () => {
+        throw new Error('gh exploded')
+      },
+    } as never
+    const app = appWith({}, ctx)
+    const res = await post(app, '/override', { effort: 'o/home#1', stage: 'to-spec', reason: 'x' })
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: 'gh exploded' })
   })
 })

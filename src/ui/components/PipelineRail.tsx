@@ -183,6 +183,15 @@ function StageDetail({
         <p className="dimmer mt-1.5 text-[12px]">
           {sessionCount} session{sessionCount === 1 ? '' : 's'} on this effort — docked on the right.
         </p>
+        {gate && (
+          <OverrideGate
+            effortId={effortId}
+            stage={gate.stage}
+            met={gate.met}
+            overridden={gate.overridden}
+            onDone={refresh}
+          />
+        )}
         {(rail.key === 'implement' || rail.key === 'code-review') && snapshot && (
           <TicketList effortId={effortId} tickets={snapshot.tickets} refresh={refresh} />
         )}
@@ -190,6 +199,94 @@ function StageDetail({
           <LandEffort effortId={effortId} onDone={refresh} />
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Gate override (#6/#40): per-stage "I know what I'm doing" with a required
+ * reason — POSTs /api/pipeline/override, which writes the audit comment then
+ * the stamp. An overridden gate offers revoke instead.
+ */
+function OverrideGate({
+  effortId,
+  stage,
+  met,
+  overridden,
+  onDone,
+}: {
+  effortId: string
+  stage: string
+  met: boolean
+  overridden: boolean
+  onDone: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const run = async (action: () => Promise<string | null>) => {
+    setBusy(true)
+    const error = await action()
+    setBusy(false)
+    if (error) store.setError(error)
+    else {
+      setOpen(false)
+      setReason('')
+      onDone()
+    }
+  }
+
+  if (overridden) {
+    return (
+      <div className="mt-3 flex items-center gap-2.5" style={{ borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+        <span className="dim text-[12.5px]">Override stamp on the map issue — audit comment holds who/why.</span>
+        <span className="flex-1" />
+        <button className="btn sm" disabled={busy} onClick={() => void run(() => store.revokeOverride(effortId, stage))}>
+          {busy ? 'Revoking…' : 'Revoke override'}
+        </button>
+      </div>
+    )
+  }
+  if (met) return null
+  return (
+    <div className="mt-3" style={{ borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+      {!open ? (
+        <div className="flex items-center gap-2.5">
+          <span className="dim text-[12.5px]">Gate not met — hard gates only unlock on their exit condition.</span>
+          <span className="flex-1" />
+          <button className="btn sm" onClick={() => setOpen(true)}>
+            ⚠ Override gate…
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <span className="dim text-[12.5px]">
+            Overriding records an audit comment and stamps the map issue — a reason is required.
+          </span>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <textarea
+              rows={2}
+              placeholder="Why is it safe to pass this gate anyway?"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="flex-1" />
+            <button className="btn sm" disabled={busy} onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+            <button
+              className="btn danger sm"
+              disabled={busy || !reason.trim()}
+              onClick={() => void run(() => store.applyOverride(effortId, stage, reason))}
+            >
+              {busy ? 'Overriding…' : 'I know what I’m doing — override'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

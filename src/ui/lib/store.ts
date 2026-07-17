@@ -299,6 +299,17 @@ export class Store {
     return { results }
   }
 
+  /** Gate override (#40): "I know what I'm doing" with a required reason; audit lands on the map issue. */
+  async applyOverride(effort: string, stage: string, reason: string): Promise<string | null> {
+    const res = await mutateJson('/api/pipeline/override', 'POST', { effort, stage, reason })
+    return res.error ?? null
+  }
+
+  async revokeOverride(effort: string, stage: string): Promise<string | null> {
+    const res = await mutateJson('/api/pipeline/override/revoke', 'POST', { effort, stage })
+    return res.error ?? null
+  }
+
   dismissNotice(id: string) {
     this.set({ notices: this.state.notices.filter((n) => n.id !== id) })
   }
