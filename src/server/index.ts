@@ -7,10 +7,13 @@ import { createNodeWebSocket } from '@hono/node-ws'
 import { Hono } from 'hono'
 import { ClaudeCodeAdapter } from '../adapters/index.js'
 import type { GhExec } from '../gating/index.js'
+import type { Exec } from '../pipeline/git.js'
+import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { listEfforts } from './efforts.js'
+import { createPipelineApp } from './pipeline-routes.js'
 import { SessionRegistry } from './registry.js'
 import { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
-import { createStageService, type StageService } from './stage.js'
+import { createStageService, createTrackerContext, type StageService } from './stage.js'
 import { TranscriptStore } from './transcripts.js'
 import { createConnection } from './ws.js'
 import { discoverWorkspace, type Workspace } from './workspace.js'
@@ -23,8 +26,16 @@ export { SessionRegistry, RegistryError, type StartSessionOptions } from './regi
 export { TranscriptStore, type SessionMeta, type TranscriptEvent } from './transcripts.js'
 export { createConnection, type ClientMessage, type ServerMessage } from './ws.js'
 export { discoverWorkspace, type RepoInfo, type Workspace } from './workspace.js'
-export { createStageService, loadTrackerConfig, type StageService, type TrackerConfig } from './stage.js'
+export { createStageService, createTrackerContext, loadTrackerConfig, type StageService, type TrackerConfig, type TrackerContext } from './stage.js'
 export { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
+export { createPipelineApp, type PipelineRouteDeps } from './pipeline-routes.js'
+export {
+  PipelineOrchestrator,
+  type CleanupResult,
+  type CompleteResult,
+  type LandResult,
+  type OrchestratorDeps,
+} from '../pipeline/orchestrator.js'
 
 export interface AppDeps {
   workspace: Workspace
@@ -34,6 +45,10 @@ export interface AppDeps {
   ghExec?: GhExec
   /** Injectable for tests; defaults to a tracker-config-driven service. */
   stageService?: StageService
+  /** Injectable for tests; defaults to a tracker-config-driven orchestrator. */
+  orchestrator?: PipelineOrchestrator
+  /** Git exec for the orchestrator (tests); defaults to the real CLI. */
+  exec?: Exec
   /** Overrides for the setup routes' external effects (tests). */
   setupDeps?: Partial<SetupRouteDeps>
 }
@@ -47,6 +62,25 @@ export function createApp(deps: AppDeps) {
     (stagePromise ??= deps.stageService
       ? Promise.resolve(deps.stageService)
       : createStageService(workspace, ghExec ? { ghExec } : {}))
+  let orchestratorPromise: Promise<PipelineOrchestrator> | undefined
+  const orchestrator = () =>
+    (orchestratorPromise ??= deps.orchestrator
+      ? Promise.resolve(deps.orchestrator)
+      : createTrackerContext(workspace, ghExec ? { ghExec } : {}).then(
+          (ctx) =>
+            new PipelineOrchestrator({
+              workspace,
+              registry,
+              tracker: ctx.deps.tracker,
+              prSource: ctx.deps.prSource,
+              resolveRepoDir: ctx.deps.resolveRepoDir,
+              mintEffortRef: ctx.mintEffortRef,
+              ...(deps.exec ? { exec: deps.exec } : {}),
+            }),
+        ))
+  // Worktrees of merged ticket PRs auto-remove (#11); the UI polls /api/stage,
+  // so a throttled fire-and-forget sweep there is the merge-reaction hook.
+  const lastCleanup = new Map<string, number>()
   const app = new Hono()
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
 
@@ -62,11 +96,19 @@ export function createApp(deps: AppDeps) {
     const effort = c.req.query('effort')
     if (!effort) return c.json({ error: 'missing ?effort=<ref-id>' }, 400)
     try {
-      return c.json(await (await stageService()).snapshot(effort))
+      const snapshot = await (await stageService()).snapshot(effort)
+      if (Date.now() - (lastCleanup.get(effort) ?? 0) > 60_000) {
+        lastCleanup.set(effort, Date.now())
+        void orchestrator()
+          .then((o) => o.cleanupMerged(effort))
+          .catch(() => {})
+      }
+      return c.json(snapshot)
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502)
     }
   })
+  app.route('/api/pipeline', createPipelineApp({ orchestrator }))
   app.get('/api/sessions', async (c) => c.json(await registry.list()))
   app.get('/api/sessions/:id', async (c) => {
     const id = c.req.param('id')

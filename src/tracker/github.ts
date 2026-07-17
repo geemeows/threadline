@@ -11,6 +11,7 @@ import type {
   LabelNamespace,
   RoutingTarget,
   SpecStatus,
+  TicketBody,
   TicketRef,
   TrackerAdapter,
   TrackerCapabilities,
@@ -111,6 +112,15 @@ export class GitHubAdapter implements TrackerAdapter {
     return issue.labels
       .map((l) => logicalName(l.name))
       .filter((n): n is string => n !== null)
+  }
+
+  async ticketBody(ref: TicketRef): Promise<TicketBody> {
+    const { repo, number } = parseGitHubRef(ref.id)
+    const issue = JSON.parse(await this.run(['api', `repos/${repo}/issues/${number}`])) as {
+      title: string
+      body: string | null
+    }
+    return { title: issue.title, body: issue.body ?? '' }
   }
 
   async ticketTarget(ref: TicketRef): Promise<RoutingTarget> {

@@ -223,3 +223,14 @@ describe('LinearApiError', () => {
     expect(err.kind).toBe('http')
   })
 })
+
+describe('LinearAdapter ticketBody', () => {
+  it('returns title + description, coercing null description to empty', async () => {
+    const { client, calls } = fakeClient({
+      'title description': { issue: { title: 'Fix the flux', description: null } },
+    })
+    const adapter = new LinearAdapter({ client })
+    expect(await adapter.ticketBody(MAP)).toEqual({ title: 'Fix the flux', body: '' })
+    expect(calls[0]?.variables).toEqual({ id: 'map-uuid' })
+  })
+})

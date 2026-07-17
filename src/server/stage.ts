@@ -61,17 +61,34 @@ const defaultGhExec: GhExec = async (args, repoDir) => {
   return stdout
 }
 
+/**
+ * Tracker context shared by the stage service and the pipeline orchestrator:
+ * the gather deps plus the ref-minting rule for the configured tracker.
+ */
+export interface TrackerContext {
+  config: TrackerConfig
+  deps: GatherDeps
+  mintEffortRef: (id: string) => TicketRef
+}
+
+export async function createTrackerContext(
+  workspace: Workspace,
+  opts: Pick<StageServiceOptions, 'ghExec' | 'config'> = {},
+): Promise<TrackerContext> {
+  const ghExec = opts.ghExec ?? defaultGhExec
+  const config = opts.config ?? (await loadTrackerConfig(workspace.root))
+  const deps = config.tracker === 'linear'
+    ? await linearDeps(workspace, config, ghExec)
+    : await githubDeps(workspace, ghExec)
+  return { config, deps, mintEffortRef: (id) => mintEffortRef(config.tracker, id) }
+}
+
 export async function createStageService(
   workspace: Workspace,
   opts: StageServiceOptions = {},
 ): Promise<StageService> {
-  const ghExec = opts.ghExec ?? defaultGhExec
-  const config = opts.config ?? (await loadTrackerConfig(workspace.root))
+  const { deps, config } = await createTrackerContext(workspace, opts)
   const ttl = opts.cacheTtlMs ?? 5_000
-
-  const deps = config.tracker === 'linear'
-    ? await linearDeps(workspace, config, ghExec)
-    : await githubDeps(workspace, ghExec)
 
   const cache = new Map<string, { at: number; snapshot: StageSnapshot }>()
   return {
