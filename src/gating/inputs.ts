@@ -3,7 +3,7 @@
 
 import type { TrackerAdapter, TicketRef } from '../tracker/types.js'
 import type { GateInputs, PRSource, RepoResolver, TicketView } from './types.js'
-import { ticketBranch, trunkBranch } from './branches.js'
+import { trunkBranch } from './branches.js'
 
 export interface GatherDeps {
   tracker: TrackerAdapter
@@ -24,7 +24,7 @@ export async function gatherGateInputs(deps: GatherDeps, effort: TicketRef): Pro
     ticketChildren.map(async (child): Promise<TicketView> => {
       const target = await tracker.ticketTarget(child.ref)
       const repoDir = deps.resolveRepoDir(target)
-      const pr = await deps.prSource.ticketPR(repoDir, ticketBranch(child.ref), trunk)
+      const pr = await deps.prSource.ticketPR(repoDir, child.ref, trunk)
       return { ref: child.ref, closed: child.state === 'closed', pr }
     }),
   )

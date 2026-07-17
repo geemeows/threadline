@@ -1,9 +1,13 @@
 // gh-backed PRSource. PR linkage rides the branch-naming convention and the
 // `gh` CLI's auth, regardless of which tracker the workspace uses (#19 §6).
+// Sessions mint branch names (#26), so exact names are not recomputable —
+// this lists PRs targeting the effort trunk and matches by ticket-id regex.
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import type { TicketRef } from '../tracker/types.js'
 import type { PRInfo, PRSource } from './types.js'
+import { githubIssueNumber, ticketBranchPattern } from './branches.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -19,22 +23,31 @@ interface GhPr {
   number: number
   url: string
   state: 'OPEN' | 'MERGED' | 'CLOSED'
+  headRefName: string
+  body: string
 }
 
 export class GhPrSource implements PRSource {
   constructor(private exec: GhExec = defaultExec) {}
 
-  async ticketPR(repoDir: string, branch: string, trunk: string): Promise<PRInfo | null> {
+  async ticketPR(repoDir: string, ticket: TicketRef, trunk: string): Promise<PRInfo | null> {
     const out = await this.exec(
-      ['pr', 'list', '--head', branch, '--base', trunk, '--state', 'all', '--json', 'number,url,state', '--limit', '20'],
+      ['pr', 'list', '--base', trunk, '--state', 'all', '--json', 'number,url,state,headRefName,body', '--limit', '100'],
       repoDir,
     )
-    const pr = pickPR(JSON.parse(out) as GhPr[])
+    const pattern = ticketBranchPattern(ticket)
+    const pr = pickPR((JSON.parse(out) as GhPr[]).filter((p) => pattern.test(p.headRefName)))
     if (!pr) return null
     const state = pr.state === 'MERGED' ? 'merged' : pr.state === 'OPEN' ? 'open' : 'closed'
     // Closed-unmerged PRs are abandoned — thread state is irrelevant.
     const unresolved = state === 'closed' ? 0 : await this.unresolvedThreads(repoDir, pr.number)
-    return { url: pr.url, state, unresolvedReviewThreads: unresolved }
+    const info: PRInfo = { url: pr.url, state, unresolvedReviewThreads: unresolved }
+    // `Ticket: #<n>` body backstop (#26) — GitHub-tracker refs only; Linear
+    // linkage rides the branch name itself. Warning, never a gate.
+    const issue = githubIssueNumber(ticket)
+    if (issue !== null && !new RegExp(`Ticket:\\s*#${issue}\\b`, 'i').test(pr.body ?? ''))
+      info.missingTicketRef = true
+    return info
   }
 
   private async unresolvedThreads(repoDir: string, prNumber: number): Promise<number> {

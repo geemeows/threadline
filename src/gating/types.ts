@@ -29,6 +29,11 @@ export interface PRInfo {
   url: string
   state: 'open' | 'merged' | 'closed'
   unresolvedReviewThreads: number
+  /**
+   * Set (true) when a GitHub-tracker ticket's PR body lacks its `Ticket: #<n>`
+   * reference (#26) — a Needs-you warning, never a gate condition.
+   */
+  missingTicketRef?: boolean
 }
 
 export interface GateStatus {
@@ -47,6 +52,8 @@ export interface StageSnapshot {
   gates: GateStatus[]
   /** All five gates pass — the UI may offer one-click "Complete effort" (never automatic). */
   readyToComplete: boolean
+  /** Non-blocking Needs-you notices (e.g. a PR body missing `Ticket: #<n>`). */
+  warnings: string[]
 }
 
 /**
@@ -54,8 +61,12 @@ export interface StageSnapshot {
  * GitHub even in Linear workspaces. Queried by branch-naming convention.
  */
 export interface PRSource {
-  /** The ticket's PR on `branch` targeting `trunk` in the repo at `repoDir`, or null. */
-  ticketPR(repoDir: string, branch: string, trunk: string): Promise<PRInfo | null>
+  /**
+   * The ticket's PR targeting `trunk` in the repo at `repoDir`, or null.
+   * Matched by the ticket-id branch pattern (#26) — exact branch names are
+   * session-minted and not recomputable.
+   */
+  ticketPR(repoDir: string, ticket: TicketRef, trunk: string): Promise<PRInfo | null>
 }
 
 /** Resolves a tracker RoutingTarget to the local clone owning it. */
