@@ -124,6 +124,32 @@ describe('setup routes', () => {
     expect((await app.request('/docs/plan?repo=nope')).status).toBe(404)
   })
 
+  it('POST /github/provision stamps the vocabulary into every confirmed repo (#43)', async () => {
+    const workspace = await makeWorkspace()
+    await writeConfig(workspace.root, { tracker: 'github', repos: ['api'] })
+    const calls: { args: string[]; cwd?: string }[] = []
+    const app = makeApp(workspace, {
+      exec: async (_cmd, args, cwd) => {
+        calls.push({ args, cwd })
+        return ''
+      },
+    })
+    const res = await app.request('/github/provision', { method: 'POST' })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { repos: { name: string; ok: boolean }[] }
+    expect(body.repos).toEqual([{ name: 'api', ok: true, detail: expect.stringContaining('labels') }])
+    const labelCalls = calls.filter((c) => c.args[0] === 'label')
+    expect(labelCalls.length).toBeGreaterThan(0)
+    expect(labelCalls.every((c) => c.cwd === join(workspace.root, 'api'))).toBe(true)
+  })
+
+  it('POST /github/provision with no confirmed repos is a 400', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'threadmap-routes-'))
+    const workspace: Workspace = { root: dir, repos: [] }
+    const app = makeApp(workspace)
+    expect((await app.request('/github/provision', { method: 'POST' })).status).toBe(400)
+  })
+
   it('GET /linear/teams uses the injected client', async () => {
     const workspace = await makeWorkspace()
     await writeConfig(workspace.root, { tracker: 'linear' })

@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react'
 import { mutateJson, store, useStore } from '../lib/store.js'
-import type { DocPlanEntry, LinearOrgInfo, LinearTeam, SetupStatus } from '../lib/types.js'
+import type { DocPlanEntry, GitHubProvisionResult, LinearOrgInfo, LinearTeam, SetupStatus } from '../lib/types.js'
 import { Pill } from './primitives.js'
 
 const DOC_AGENT_PROMPT = [
@@ -58,6 +58,7 @@ export function SetupPanel() {
           <TrackerSection setup={setup} />
           <AuthSection setup={setup} />
           {setup.tracker === 'linear' && <TeamsSection setup={setup} />}
+          {setup.tracker === 'github' && <LabelsSection setup={setup} />}
           <SkillsSection setup={setup} />
           <DocsSection setup={setup} />
         </div>
@@ -268,6 +269,49 @@ function TeamsSection({ setup }: { setup: SetupStatus }) {
         >
           {provisioned ? '✓ Provisioned' : 'Provision teams'}
         </button>
+      </div>
+      {error && <ErrorLine text={error} />}
+    </Section>
+  )
+}
+
+/* ---------- 4b. GitHub label vocabulary provisioning (#43) ---------- */
+
+function LabelsSection({ setup }: { setup: SetupStatus }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [results, setResults] = useState<GitHubProvisionResult[] | null>(null)
+
+  const provision = async () => {
+    setBusy(true)
+    setError(null)
+    const res = await mutateJson<{ repos: GitHubProvisionResult[] }>('/api/setup/github/provision', 'POST', {})
+    setBusy(false)
+    if (res.data?.repos) setResults(res.data.repos)
+    else if (res.error) setError(res.error)
+  }
+
+  const allOk = results !== null && results.every((r) => r.ok)
+  return (
+    <Section title="Labels" ok={allOk}>
+      <div className="mb-2">
+        Stamp the threadline label vocabulary into each confirmed repo — sessions fail to create
+        labelled issues without it.
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          className="btn primary sm"
+          disabled={busy || setup.repos.length === 0 || !setup.auth.ok}
+          onClick={() => void provision()}
+          title="gh label create the wayfinder:*/threadline:* vocabulary in every confirmed repo"
+        >
+          {busy ? 'stamping…' : allOk ? '✓ Provisioned' : 'Provision labels'}
+        </button>
+        {results?.map((r) => (
+          <Pill key={r.name} tone={r.ok ? 'mint' : 'amber'} title={r.detail}>
+            {r.ok ? '✓' : '!'} {r.name}
+          </Pill>
+        ))}
       </div>
       {error && <ErrorLine text={error} />}
     </Section>

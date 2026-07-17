@@ -24,6 +24,27 @@ export function logicalName(spelled: string): string | null {
 export const TICKET_LABEL = spellLabel('ticket')
 export const SPEC_LABEL = spellLabel('spec')
 
+/**
+ * The full label vocabulary threadline stamps and queries (flat, colon-safe).
+ * Provisioned into every Linear workspace (#20/#21) and every confirmed
+ * GitHub repo (#43) during setup.
+ */
+export const VOCABULARY_LABELS = [
+  'wayfinder:map',
+  'wayfinder:research',
+  'wayfinder:prototype',
+  'wayfinder:grilling',
+  'wayfinder:task',
+  'threadline:ticket',
+  'threadline:spec',
+  'threadline:ticketed',
+  'threadline:override:planning',
+  'threadline:override:to-spec',
+  'threadline:override:to-tickets',
+  'threadline:override:implement',
+  'threadline:override:code-review',
+]
+
 /** True when `spelled` falls in the given namespace filter. */
 export function inNamespace(spelled: string, ns: 'wayfinder' | 'ticket'): boolean {
   return ns === 'wayfinder' ? spelled.startsWith(WAYFINDER_PREFIX) : spelled === TICKET_LABEL
