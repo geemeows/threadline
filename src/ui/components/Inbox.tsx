@@ -35,7 +35,7 @@ export function Inbox() {
           <div key={n.id} className="session-row" style={{ cursor: 'default' }}>
             <span className="dot approval" />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-semibold">Dirty worktree kept — {n.repo}</div>
+              <div className="truncate font-semibold">{n.title}</div>
               <div className="dimmer mono truncate">
                 {n.effort} · {n.text}
               </div>

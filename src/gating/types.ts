@@ -36,6 +36,12 @@ export interface PRInfo {
    * reference (#26) — a Needs-you warning, never a gate condition.
    */
   missingTicketRef?: boolean
+  /**
+   * Latest advisory review verdict (#41): the newest review whose body's first
+   * line is `Verdict: approve|request-changes`. Purely advisory — surfaced as
+   * a pill / inbox item / warning, never consumed by a gate.
+   */
+  agentVerdict?: 'approve' | 'request-changes'
 }
 
 export interface GateStatus {
