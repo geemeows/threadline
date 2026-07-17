@@ -8,6 +8,7 @@ import { Inbox } from './components/Inbox.js'
 import { NewSessionDialog } from './components/NewSessionDialog.js'
 import { PipelineRail } from './components/PipelineRail.js'
 import { SessionPane } from './components/SessionPane.js'
+import { SetupPanel } from './components/SetupPanel.js'
 import { TopBar } from './components/TopBar.js'
 import { store, useStore } from './lib/store.js'
 
@@ -42,6 +43,7 @@ export function App() {
       </div>
       <Inbox />
       <NewSessionDialog />
+      <SetupPanel />
     </div>
   )
 }

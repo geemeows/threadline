@@ -7,7 +7,7 @@ export default defineConfig({
         test: {
           name: 'server',
           environment: 'node',
-          include: ['src/{server,cli,adapters,tracker,gating,pipeline}/**/*.test.ts'],
+          include: ['src/{server,cli,adapters,tracker,gating,pipeline,setup}/**/*.test.ts'],
         },
       },
       {

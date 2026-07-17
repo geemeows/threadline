@@ -9,6 +9,7 @@ import { ClaudeCodeAdapter } from '../adapters/index.js'
 import type { GhExec } from '../gating/index.js'
 import { listEfforts } from './efforts.js'
 import { SessionRegistry } from './registry.js'
+import { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
 import { createStageService, type StageService } from './stage.js'
 import { TranscriptStore } from './transcripts.js'
 import { createConnection } from './ws.js'
@@ -23,6 +24,7 @@ export { TranscriptStore, type SessionMeta, type TranscriptEvent } from './trans
 export { createConnection, type ClientMessage, type ServerMessage } from './ws.js'
 export { discoverWorkspace, type RepoInfo, type Workspace } from './workspace.js'
 export { createStageService, loadTrackerConfig, type StageService, type TrackerConfig } from './stage.js'
+export { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
 
 export interface AppDeps {
   workspace: Workspace
@@ -32,6 +34,8 @@ export interface AppDeps {
   ghExec?: GhExec
   /** Injectable for tests; defaults to a tracker-config-driven service. */
   stageService?: StageService
+  /** Overrides for the setup routes' external effects (tests). */
+  setupDeps?: Partial<SetupRouteDeps>
 }
 
 export function createApp(deps: AppDeps) {
@@ -47,6 +51,7 @@ export function createApp(deps: AppDeps) {
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
 
   app.get('/api/health', (c) => c.json({ ok: true, name: 'threadmap' }))
+  app.route('/api/setup', createSetupApp({ workspace, ...deps.setupDeps }))
   app.get('/api/workspace', (c) => c.json(workspace))
   app.get('/api/efforts', async (c) =>
     c.json(await listEfforts(workspace.repos, ghExec, {

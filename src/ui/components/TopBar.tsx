@@ -36,6 +36,13 @@ export function TopBar() {
           <span className="mono">Σ ${total.toFixed(2)}</span>
         </Pill>
       )}
+      <button
+        className={`pill ${state.setup && !state.setup.ready ? 'amber' : ''}`}
+        onClick={() => store.setSetupOpen(true)}
+        title="workspace readiness"
+      >
+        ⚙ setup
+      </button>
       <button className="pill" onClick={() => store.toggleTheme()} title="toggle theme">
         {state.theme === 'dark' ? '☀︎' : '☾'}
       </button>
