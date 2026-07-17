@@ -186,3 +186,16 @@ describe('GitHubAdapter changesSince', () => {
     expect(second.cursor).toBe(first.cursor)
   })
 })
+
+describe('GitHubAdapter ticketBody', () => {
+  it('returns title + body, coercing a null body to empty', async () => {
+    const { run } = fakeGh({
+      'issues/7': { title: 'Fix the flux', body: null },
+    })
+    const adapter = new GitHubAdapter({ targets: TARGETS, run })
+    expect(await adapter.ticketBody(mintGitHubRef('acme/web', 7))).toEqual({
+      title: 'Fix the flux',
+      body: '',
+    })
+  })
+})

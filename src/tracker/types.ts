@@ -28,6 +28,12 @@ export interface TrackerAdapter {
   specStatus(effort: TicketRef): Promise<SpecStatus>
   /** Logical stamp names present on the map issue ('ticketed', 'override:<stage>', …). */
   mapStamps(effort: TicketRef): Promise<string[]>
+  /**
+   * Title + body of one ticket. Implement/reconcile session prompts embed the
+   * ticket verbatim, so this is a content read, not a gate question.
+   * (Interface refinement of #19, surfaced by the orchestration work in #30.)
+   */
+  ticketBody(ref: TicketRef): Promise<TicketBody>
   ticketTarget(ref: TicketRef): Promise<RoutingTarget>
   routingTargets(): Promise<RoutingTarget[]>
 
@@ -56,6 +62,11 @@ export interface TicketRef {
   id: string
   display: string
   url: string
+}
+
+export interface TicketBody {
+  title: string
+  body: string
 }
 
 export interface ChildTicket {

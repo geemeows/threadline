@@ -19,6 +19,7 @@ import type {
   LabelNamespace,
   RoutingTarget,
   SpecStatus,
+  TicketBody,
   TicketRef,
   TrackerAdapter,
   TrackerCapabilities,
@@ -115,6 +116,14 @@ export class LinearAdapter implements TrackerAdapter {
     return data.issue.labels.nodes
       .map((l) => logicalName(l.name))
       .filter((n): n is string => n !== null)
+  }
+
+  async ticketBody(ref: TicketRef): Promise<TicketBody> {
+    const data = await this.client.query<{ issue: { title: string; description: string | null } }>(
+      `query($id: String!) { issue(id: $id) { title description } }`,
+      { id: ref.id },
+    )
+    return { title: data.issue.title, body: data.issue.description ?? '' }
   }
 
   async ticketTarget(ref: TicketRef): Promise<RoutingTarget> {

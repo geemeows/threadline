@@ -43,6 +43,9 @@ class FakeTracker implements TrackerAdapter {
   async mapStamps() {
     return this.stamps
   }
+  async ticketBody() {
+    return { title: 'ticket title', body: 'ticket body' }
+  }
   async ticketTarget() {
     return { id: 'o/repo', display: 'o/repo' }
   }
