@@ -57,10 +57,11 @@ export function formatOverrideComment(stage: Stage, record: OverrideRecord): str
 }
 
 /**
- * Completion is user-triggered, never automatic (#6): when code-review's gate
- * passes the UI offers one-click "Complete effort", which lands here.
+ * Close the effort's map issue. Completion is user-triggered, never automatic
+ * (#6): the orchestrator's completeEffort calls this after a fully-clean
+ * sweep, on the user's "Complete effort" click.
  */
-export async function completeEffort(
+export async function closeEffort(
   tracker: TrackerAdapter,
   effort: TicketRef,
   summary: string,

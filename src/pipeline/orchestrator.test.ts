@@ -250,15 +250,21 @@ describe('cleanupMerged', () => {
 })
 
 describe('completeEffort', () => {
-  it('sweeps clean worktrees and deletes the trunk', async () => {
+  it('sweeps clean worktrees, deletes the trunk, and closes the map issue', async () => {
     const { exec, calls } = fakeExec({
       'worktree list': `worktree ${WT}\nworktree ${LAND_WT}\n`,
       'status --porcelain': '',
       'rev-list --count': '0\n',
       'ls-remote --heads': '',
     })
-    const orch = new PipelineOrchestrator(makeDeps({ exec }))
-    const [result] = await orch.completeEffort(EFFORT_ID)
+    const resolved: unknown[] = []
+    const tracker = fakeTracker({
+      resolve: async (ref: TicketRef, outcome: string) => {
+        resolved.push([ref.id, outcome])
+      },
+    })
+    const orch = new PipelineOrchestrator(makeDeps({ exec, tracker }))
+    const { results: [result], mapClosed } = await orch.completeEffort(EFFORT_ID)
     expect(result).toEqual({
       repo: 'web',
       removedWorktrees: [WT, LAND_WT],
@@ -266,15 +272,23 @@ describe('completeEffort', () => {
       trunkDeleted: true,
     })
     expect(calls).toContain('git push origin --delete tm/effort/1')
+    expect(mapClosed).toBe(true)
+    expect(resolved).toEqual([[EFFORT_ID, 'done']])
   })
 
-  it('a dirty worktree blocks trunk deletion unless forced', async () => {
+  it('a dirty worktree blocks trunk deletion and map closing unless forced', async () => {
     const { exec, calls } = fakeExec({
       'worktree list': `worktree ${WT}\n`,
       'status --porcelain': ' M src/a.ts\n',
     })
-    const orch = new PipelineOrchestrator(makeDeps({ exec }))
-    const [kept] = await orch.completeEffort(EFFORT_ID)
+    const resolved: unknown[] = []
+    const tracker = fakeTracker({
+      resolve: async (ref: TicketRef, outcome: string) => {
+        resolved.push([ref.id, outcome])
+      },
+    })
+    const orch = new PipelineOrchestrator(makeDeps({ exec, tracker }))
+    const { results: [kept], mapClosed } = await orch.completeEffort(EFFORT_ID)
     expect(kept).toEqual({
       repo: 'web',
       removedWorktrees: [],
@@ -282,10 +296,14 @@ describe('completeEffort', () => {
       trunkDeleted: false,
     })
     expect(calls.some((c) => c.includes('--delete'))).toBe(false)
+    expect(mapClosed).toBe(false)
+    expect(resolved).toEqual([])
 
-    const forced = new PipelineOrchestrator(makeDeps({ exec }))
-    const [swept] = await forced.completeEffort(EFFORT_ID, { force: true })
-    expect(swept!.removedWorktrees).toEqual([WT])
-    expect(swept!.trunkDeleted).toBe(true)
+    const forced = new PipelineOrchestrator(makeDeps({ exec, tracker }))
+    const swept = await forced.completeEffort(EFFORT_ID, { force: true })
+    expect(swept.results[0]!.removedWorktrees).toEqual([WT])
+    expect(swept.results[0]!.trunkDeleted).toBe(true)
+    expect(swept.mapClosed).toBe(true)
+    expect(resolved).toEqual([[EFFORT_ID, 'done']])
   })
 })

@@ -11,6 +11,7 @@ import type { SessionRegistry } from '../server/registry.js'
 import type { Workspace } from '../server/workspace.js'
 import type { PRSource, RepoResolver } from '../gating/types.js'
 import { refSlug, trunkBranch } from '../gating/branches.js'
+import { closeEffort } from '../gating/override.js'
 import type { TicketRef, TrackerAdapter } from '../tracker/types.js'
 import { implementSessionInstructions, trunkToMainPrBody } from './implement-prompt.js'
 import {
@@ -58,6 +59,12 @@ export interface CompleteResult {
   removedWorktrees: string[]
   keptWorktrees: string[]
   trunkDeleted: boolean
+}
+
+export interface CompleteOutcome {
+  results: CompleteResult[]
+  /** True when the sweep was fully clean and the map issue was closed (#6). */
+  mapClosed: boolean
 }
 
 export class PipelineOrchestrator {
@@ -241,9 +248,11 @@ export class PipelineOrchestrator {
 
   /**
    * Post-landing sweep (#11): remove the effort's remaining worktrees (only
-   * with `force` when dirty) and delete each repo's trunk.
+   * with `force` when dirty) and delete each repo's trunk. When the sweep is
+   * fully clean, close the map issue — the click is the user's completion act
+   * (#6); a kept-dirty worktree leaves the map open for a forced re-run.
    */
-  async completeEffort(effortId: string, opts: { force?: boolean } = {}): Promise<CompleteResult[]> {
+  async completeEffort(effortId: string, opts: { force?: boolean } = {}): Promise<CompleteOutcome> {
     const effort = this.deps.mintEffortRef(effortId)
     const trunk = trunkBranch(effort)
     const results: CompleteResult[] = []
@@ -273,7 +282,15 @@ export class PipelineOrchestrator {
       }
       results.push({ repo: entry.repoName, removedWorktrees: removed, keptWorktrees: kept, trunkDeleted })
     }
-    return results
+    const mapClosed = results.every((r) => r.keptWorktrees.length === 0)
+    if (mapClosed) {
+      await closeEffort(
+        this.deps.tracker,
+        effort,
+        'Effort completed via threadmap — worktrees swept and effort trunks deleted.',
+      )
+    }
+    return { results, mapClosed }
   }
 
   // -- internals -------------------------------------------------------------

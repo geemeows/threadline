@@ -83,7 +83,7 @@ describe('pipeline routes', () => {
     const app = appWith({
       completeEffort: async (_effort: string, opts: unknown) => {
         seen.push(opts)
-        return []
+        return { results: [], mapClosed: true }
       },
     })
     await post(app, '/complete', { effort: 'o/home#1', force: true })

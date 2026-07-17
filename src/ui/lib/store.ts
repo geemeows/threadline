@@ -280,8 +280,13 @@ export class Store {
     return { results }
   }
 
-  async completeEffort(effort: string, force = false): Promise<{ results?: CompleteResult[]; error?: string }> {
-    const res = await mutateJson<{ results: CompleteResult[] }>('/api/pipeline/complete', 'POST', { effort, force })
+  async completeEffort(
+    effort: string,
+    force = false,
+  ): Promise<{ results?: CompleteResult[]; mapClosed?: boolean; error?: string }> {
+    const res = await mutateJson<{ results: CompleteResult[]; mapClosed: boolean }>(
+      '/api/pipeline/complete', 'POST', { effort, force },
+    )
     if (res.error) return { error: res.error }
     const results = res.data?.results ?? []
     const kept = results.flatMap((r) =>
@@ -296,7 +301,7 @@ export class Store {
       const known = new Set(this.state.notices.map((n) => n.id))
       this.set({ notices: [...this.state.notices, ...kept.filter((n) => !known.has(n.id))] })
     }
-    return { results }
+    return { results, mapClosed: res.data?.mapClosed ?? false }
   }
 
   /** Gate override (#40): "I know what I'm doing" with a required reason; audit lands on the map issue. */
