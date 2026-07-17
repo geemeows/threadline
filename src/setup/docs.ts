@@ -10,7 +10,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { defaultExec, type Exec } from './exec.js'
 
-export const DOCS_COMMIT_MESSAGE = 'docs: threadline setup — agent docs'
+export const TEMPLATE_DOCS_COMMIT_MESSAGE = 'docs: threadline setup — stamp doc templates'
+export const AGENT_DOCS_COMMIT_MESSAGE = 'docs: threadline setup — agent docs'
 export const DOCS_FALLBACK_BRANCH = 'tm/setup/agent-docs'
 
 /** All docs readiness checks; the first two are template-stamped, the rest agent-seeded. */
@@ -72,7 +73,7 @@ export async function applyDocs(
     await writeFile(abs, entry.proposed, 'utf8')
   }
   await exec('git', ['add', '--', ...picked.map((e) => e.path)], repoDir)
-  await exec('git', ['commit', '-m', DOCS_COMMIT_MESSAGE], repoDir)
+  await exec('git', ['commit', '-m', TEMPLATE_DOCS_COMMIT_MESSAGE], repoDir)
   try {
     await exec('git', ['push'], repoDir)
     return { mode: 'committed' }
@@ -82,7 +83,7 @@ export async function applyDocs(
     await exec('git', ['push', '-u', 'origin', DOCS_FALLBACK_BRANCH], repoDir)
     const out = await exec(
       'gh',
-      ['pr', 'create', '--title', DOCS_COMMIT_MESSAGE, '--body', 'Automated threadline setup docs.', '--head', DOCS_FALLBACK_BRANCH],
+      ['pr', 'create', '--title', TEMPLATE_DOCS_COMMIT_MESSAGE, '--body', 'Automated threadline setup docs.', '--head', DOCS_FALLBACK_BRANCH],
       repoDir,
     )
     return { mode: 'pr', prUrl: out.trim().split('\n').pop() ?? '' }
@@ -96,7 +97,8 @@ export function docAgentPrompt(): string {
     'Seed CONTEXT.md at the repo root, docs/agents/glossary.md, and docs/agents/coding-standards.md',
     'from what the codebase actually contains. Do not overwrite docs/agents/issue-tracker.md',
     'or docs/adr/template.md — threadline stamps those from templates.',
-    `Commit the new docs with the message "${DOCS_COMMIT_MESSAGE}".`,
+    `Commit the new docs with the message "${AGENT_DOCS_COMMIT_MESSAGE}" and push to origin.`,
+    'If the push is rejected (branch protection), move the commit onto a branch and open a PR instead.',
   ].join(' ')
 }
 

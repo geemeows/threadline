@@ -21,8 +21,9 @@ export {
   type SkillsStatus,
 } from './skills.js'
 export {
-  DOCS_COMMIT_MESSAGE,
+  AGENT_DOCS_COMMIT_MESSAGE,
   DOCS_FALLBACK_BRANCH,
+  TEMPLATE_DOCS_COMMIT_MESSAGE,
   REQUIRED_DOCS,
   applyDocs,
   docAgentPrompt,

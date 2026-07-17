@@ -14,7 +14,8 @@ const DOC_AGENT_PROMPT = [
   'Seed CONTEXT.md at the repo root, docs/agents/glossary.md, and docs/agents/coding-standards.md',
   'from what the codebase actually contains. Do not overwrite docs/agents/issue-tracker.md',
   'or docs/adr/template.md — threadline stamps those from templates.',
-  'Commit the new docs with the message "docs: threadline setup — agent docs".',
+  'Commit the new docs with the message "docs: threadline setup — agent docs" and push to origin.',
+  'If the push is rejected (branch protection), move the commit onto a branch and open a PR instead.',
 ].join(' ')
 
 const SKILLS_AGENT_PROMPT = [
