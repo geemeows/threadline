@@ -396,10 +396,11 @@ function LandEffort({ effortId, onDone }: { effortId: string; onDone: () => void
   )
 }
 
-/** Post-landing sweep (#11): remove worktrees + trunks; kept-dirty worktrees go to the Needs-you queue. */
+/** Post-landing sweep (#11): remove worktrees + trunks; a clean sweep closes the map issue (#6). */
 function CompleteEffort({ effortId, onDone }: { effortId: string; onDone: () => void }) {
   const [busy, setBusy] = useState(false)
   const [kept, setKept] = useState<number | null>(null)
+  const [mapClosed, setMapClosed] = useState(false)
 
   const complete = async () => {
     setBusy(true)
@@ -409,6 +410,7 @@ function CompleteEffort({ effortId, onDone }: { effortId: string; onDone: () => 
     else {
       const keptCount = (res.results ?? []).reduce((n, r) => n + r.keptWorktrees.length, 0)
       setKept(keptCount)
+      setMapClosed(res.mapClosed ?? false)
       if (keptCount > 0) store.setInboxOpen(true)
       onDone()
     }
@@ -417,12 +419,15 @@ function CompleteEffort({ effortId, onDone }: { effortId: string; onDone: () => 
   return (
     <div className="mt-3 flex items-center gap-2.5">
       <Pill tone="mint">All gates pass.</Pill>
-      <span className="dim text-[12.5px]">Sweeps worktrees and trunks — then close the map issue to finish.</span>
+      <span className="dim text-[12.5px]">Sweeps worktrees and trunks, then closes the map issue.</span>
       <span className="flex-1" />
       <button className="btn primary sm" disabled={busy} onClick={() => void complete()}>
         {busy ? 'Completing…' : '✓ Complete effort'}
       </button>
-      {kept !== null && kept > 0 && <Pill tone="amber">{kept} dirty worktree{kept === 1 ? '' : 's'} kept</Pill>}
+      {mapClosed && <Pill tone="mint">map issue closed</Pill>}
+      {kept !== null && kept > 0 && (
+        <Pill tone="amber">{kept} dirty worktree{kept === 1 ? '' : 's'} kept — map left open</Pill>
+      )}
     </div>
   )
 }

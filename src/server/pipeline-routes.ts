@@ -82,9 +82,7 @@ export function createPipelineApp(deps: PipelineRouteDeps): Hono {
     const { effort, force } = await body(c)
     if (!effort) return c.json({ error: 'missing effort' }, 400)
     try {
-      return c.json({
-        results: await (await deps.orchestrator()).completeEffort(effort, { force: force ?? false }),
-      })
+      return c.json(await (await deps.orchestrator()).completeEffort(effort, { force: force ?? false }))
     } catch (err) {
       return c.json({ error: message(err) }, 502)
     }

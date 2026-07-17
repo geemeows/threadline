@@ -11,7 +11,7 @@ export { gatherGateInputs, type GatherDeps } from './inputs.js'
 export {
   applyOverride,
   revokeOverride,
-  completeEffort,
+  closeEffort,
   formatOverrideComment,
   type OverrideRecord,
 } from './override.js'

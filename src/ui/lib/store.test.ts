@@ -62,9 +62,11 @@ describe('store pipeline actions', () => {
       results: [
         { repo: 'r', removedWorktrees: ['/wt/a'], keptWorktrees: ['/wt/b'], trunkDeleted: false },
       ],
+      mapClosed: false,
     })
     const store = new Store()
-    await store.completeEffort('o/r#1')
+    const res = await store.completeEffort('o/r#1')
+    expect(res.mapClosed).toBe(false)
     await store.completeEffort('o/r#1') // same kept worktree again — no duplicate
     const notices = store.getState().notices
     expect(notices).toHaveLength(1)
