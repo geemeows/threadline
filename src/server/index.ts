@@ -10,10 +10,10 @@ import type { GhExec } from '../gating/index.js'
 import type { Exec } from '../pipeline/git.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { listEfforts } from './efforts.js'
-import { createPipelineApp } from './pipeline-routes.js'
+import { createPipelineApp, type OverrideContext } from './pipeline-routes.js'
 import { SessionRegistry } from './registry.js'
 import { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
-import { createStageService, createTrackerContext, type StageService } from './stage.js'
+import { createStageService, createTrackerContext, trackerWhoami, type StageService, type TrackerContext } from './stage.js'
 import { TranscriptStore } from './transcripts.js'
 import { createConnection } from './ws.js'
 import { discoverWorkspace, type Workspace } from './workspace.js'
@@ -26,9 +26,9 @@ export { SessionRegistry, RegistryError, type StartSessionOptions } from './regi
 export { TranscriptStore, type SessionMeta, type TranscriptEvent } from './transcripts.js'
 export { createConnection, type ClientMessage, type ServerMessage } from './ws.js'
 export { discoverWorkspace, type RepoInfo, type Workspace } from './workspace.js'
-export { createStageService, createTrackerContext, loadTrackerConfig, type StageService, type TrackerConfig, type TrackerContext } from './stage.js'
+export { createStageService, createTrackerContext, loadTrackerConfig, trackerWhoami, type StageService, type TrackerConfig, type TrackerContext } from './stage.js'
 export { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
-export { createPipelineApp, type PipelineRouteDeps } from './pipeline-routes.js'
+export { createPipelineApp, type OverrideContext, type PipelineRouteDeps } from './pipeline-routes.js'
 export {
   PipelineOrchestrator,
   type CleanupResult,
@@ -62,11 +62,15 @@ export function createApp(deps: AppDeps) {
     (stagePromise ??= deps.stageService
       ? Promise.resolve(deps.stageService)
       : createStageService(workspace, ghExec ? { ghExec } : {}))
+  // One tracker context feeds both the orchestrator and the override routes.
+  let ctxPromise: Promise<TrackerContext> | undefined
+  const trackerContext = () =>
+    (ctxPromise ??= createTrackerContext(workspace, ghExec ? { ghExec } : {}))
   let orchestratorPromise: Promise<PipelineOrchestrator> | undefined
   const orchestrator = () =>
     (orchestratorPromise ??= deps.orchestrator
       ? Promise.resolve(deps.orchestrator)
-      : createTrackerContext(workspace, ghExec ? { ghExec } : {}).then(
+      : trackerContext().then(
           (ctx) =>
             new PipelineOrchestrator({
               workspace,
@@ -78,6 +82,18 @@ export function createApp(deps: AppDeps) {
               ...(deps.exec ? { exec: deps.exec } : {}),
             }),
         ))
+  // Override write path (#40): same tracker context + the stage service's
+  // snapshot/cache, so the stamp is visible on the very next /api/stage pull.
+  const overrides = async (): Promise<OverrideContext> => {
+    const [ctx, stage] = await Promise.all([trackerContext(), stageService()])
+    return {
+      tracker: ctx.deps.tracker,
+      mintEffortRef: ctx.mintEffortRef,
+      snapshot: (effortId) => stage.snapshot(effortId),
+      invalidate: (effortId) => stage.invalidate(effortId),
+      whoami: () => trackerWhoami(workspace.root, ghExec),
+    }
+  }
   // Worktrees of merged ticket PRs auto-remove (#11); the UI polls /api/stage,
   // so a throttled fire-and-forget sweep there is the merge-reaction hook.
   const lastCleanup = new Map<string, number>()
@@ -108,7 +124,7 @@ export function createApp(deps: AppDeps) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502)
     }
   })
-  app.route('/api/pipeline', createPipelineApp({ orchestrator }))
+  app.route('/api/pipeline', createPipelineApp({ orchestrator, overrides }))
   app.get('/api/sessions', async (c) => c.json(await registry.list()))
   app.get('/api/sessions/:id', async (c) => {
     const id = c.req.param('id')
