@@ -5,32 +5,79 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createNodeWebSocket } from '@hono/node-ws'
 import { Hono } from 'hono'
+import { ClaudeCodeAdapter } from '../adapters/index.js'
+import type { GhExec } from '../gating/index.js'
+import { listEfforts } from './efforts.js'
+import { SessionRegistry } from './registry.js'
+import { TranscriptStore } from './transcripts.js'
+import { createConnection } from './ws.js'
+import { discoverWorkspace, type Workspace } from './workspace.js'
 
 export const DEFAULT_PORT = 4664
 
-export function createApp() {
+export { threadlineHome, transcriptsDir } from './home.js'
+export { listEfforts, type EffortSummary } from './efforts.js'
+export { SessionRegistry, RegistryError, type StartSessionOptions } from './registry.js'
+export { TranscriptStore, type SessionMeta } from './transcripts.js'
+export { createConnection, type ClientMessage, type ServerMessage } from './ws.js'
+export { discoverWorkspace, type RepoInfo, type Workspace } from './workspace.js'
+
+export interface AppDeps {
+  workspace: Workspace
+  registry: SessionRegistry
+  store: TranscriptStore
+  /** Injectable for tests; defaults to the real `gh` CLI. */
+  ghExec?: GhExec
+}
+
+export function createApp(deps: AppDeps) {
+  const { workspace, registry, store, ghExec } = deps
   const app = new Hono()
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
 
   app.get('/api/health', (c) => c.json({ ok: true, name: 'threadmap' }))
+  app.get('/api/workspace', (c) => c.json(workspace))
+  app.get('/api/efforts', async (c) =>
+    c.json(await listEfforts(workspace.repos, ghExec, {
+      includeClosed: c.req.query('state') === 'all',
+    })),
+  )
+  app.get('/api/sessions', async (c) => c.json(await registry.list()))
+  app.get('/api/sessions/:id', async (c) => {
+    const id = c.req.param('id')
+    const meta = registry.get(id) ?? (await store.readMeta(id))
+    return meta ? c.json(meta) : c.json({ error: 'unknown session' }, 404)
+  })
+  app.get('/api/sessions/:id/transcript', async (c) =>
+    c.json(await store.readEvents(c.req.param('id'))),
+  )
 
   app.get(
     '/ws',
-    upgradeWebSocket(() => ({
-      onOpen(_event, ws) {
-        ws.send(JSON.stringify({ type: 'hello', message: 'threadmap server connected' }))
-      },
-      onMessage(event, ws) {
-        ws.send(JSON.stringify({ type: 'echo', message: String(event.data) }))
-      },
-    })),
+    upgradeWebSocket(() => {
+      let connection: ReturnType<typeof createConnection> | undefined
+      return {
+        onOpen(_event, ws) {
+          connection = createConnection(registry, (msg) => ws.send(JSON.stringify(msg)))
+        },
+        onMessage(event, _ws) {
+          void connection?.onMessage(String(event.data))
+        },
+        onClose() {
+          connection?.close()
+        },
+      }
+    }),
   )
 
   return { app, injectWebSocket }
 }
 
-export async function startServer(port = DEFAULT_PORT) {
-  const { app, injectWebSocket } = createApp()
+export async function startServer(port = DEFAULT_PORT, root = process.cwd()) {
+  const workspace = await discoverWorkspace(root)
+  const store = new TranscriptStore()
+  const registry = new SessionRegistry({ 'claude-code': new ClaudeCodeAdapter() }, store)
+  const { app, injectWebSocket } = createApp({ workspace, registry, store })
 
   // dist layout: dist/server.js next to dist/ui/
   const uiDir = join(dirname(fileURLToPath(import.meta.url)), 'ui')
@@ -43,6 +90,14 @@ export async function startServer(port = DEFAULT_PORT) {
 
   const server = serve({ fetch: app.fetch, port })
   injectWebSocket(server)
-  console.log(`threadmap listening on http://localhost:${port}`)
+  const shutdown = () => {
+    registry.killAll()
+    server.close()
+  }
+  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', shutdown)
+  console.log(
+    `threadmap listening on http://localhost:${port} — workspace ${root} (${workspace.repos.length} repo${workspace.repos.length === 1 ? '' : 's'})`,
+  )
   return server
 }
