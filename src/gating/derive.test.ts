@@ -127,4 +127,33 @@ describe('warnings', () => {
     expect(snap.warnings).toEqual(['o/r#2\'s PR body is missing its "Ticket: #<n>" reference'])
     expect(snap.gates.flatMap((g) => g.unmet).join()).not.toContain('Ticket:')
   })
+
+  it('flags a merged PR whose latest agent verdict is request-changes or absent (#41)', () => {
+    const snap = deriveStage(
+      inputs({
+        tickets: [
+          ticket(2, { pr: pr({ state: 'merged', agentVerdict: 'request-changes' }) }),
+          ticket(3, { pr: pr({ state: 'merged' }) }),
+          ticket(4, { pr: pr({ state: 'merged', agentVerdict: 'approve' }) }),
+        ],
+      }),
+    )
+    expect(snap.warnings).toEqual([
+      'o/r#2\'s PR was merged with the agent verdict still "request-changes"',
+      "o/r#3's PR was merged without an agent review verdict",
+    ])
+    expect(snap.gates.flatMap((g) => g.unmet).join()).not.toContain('verdict')
+  })
+
+  it('never emits verdict warnings for open or abandoned PRs — the inbox owns open ones', () => {
+    const snap = deriveStage(
+      inputs({
+        tickets: [
+          ticket(2, { pr: pr({ state: 'open', agentVerdict: 'request-changes' }) }),
+          ticket(3, { pr: pr({ state: 'closed' }) }),
+        ],
+      }),
+    )
+    expect(snap.warnings).toEqual([])
+  })
 })

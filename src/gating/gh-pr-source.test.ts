@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TicketRef } from '../tracker/types.js'
-import { countUnresolved, GhPrSource, pickPR, type GhExec } from './gh-pr-source.js'
+import { countUnresolved, GhPrSource, parseVerdict, pickPR, reviewBodies, type GhExec } from './gh-pr-source.js'
 
 function ref(id: string, display = id): TicketRef {
   return { id, display, url: `https://example.test/${id}` }
@@ -39,6 +39,30 @@ describe('countUnresolved', () => {
   })
 })
 
+describe('parseVerdict', () => {
+  it('takes the latest review carrying a Verdict first line — re-reviews supersede (#41)', () => {
+    expect(parseVerdict(['Verdict: request-changes\nnits', 'plain comment', 'Verdict: approve\nfixed'])).toBe('approve')
+    expect(parseVerdict(['Verdict: approve', 'Verdict: request-changes\nregression'])).toBe('request-changes')
+  })
+
+  it('matches the first line only, case-insensitively, and ignores everything else', () => {
+    expect(parseVerdict(['  verdict: APPROVE  \nprose'])).toBe('approve')
+    expect(parseVerdict(['prose first\nVerdict: approve'])).toBeNull()
+    expect(parseVerdict(['Verdict: maybe', 'no verdict here'])).toBeNull()
+    expect(parseVerdict([])).toBeNull()
+  })
+})
+
+describe('reviewBodies', () => {
+  it('extracts review bodies and tolerates missing shapes', () => {
+    const graphql = {
+      data: { repository: { pullRequest: { reviews: { nodes: [{ body: 'a' }, {}] } } } },
+    }
+    expect(reviewBodies(graphql)).toEqual(['a', ''])
+    expect(reviewBodies({})).toEqual([])
+  })
+})
+
 describe('GhPrSource', () => {
   it('lists PRs by trunk base, matches the ticket branch by regex, and fetches threads for live PRs', async () => {
     const calls: string[][] = []
@@ -62,6 +86,37 @@ describe('GhPrSource', () => {
     expect(calls[1]![0]).toBe('/ws/repo')
     expect(calls[1]).toContain('graphql')
     expect(calls[1]).toContain('number=7')
+  })
+
+  it('carries the latest agent verdict off the same GraphQL call (#41)', async () => {
+    const source = new GhPrSource(async (args) => {
+      if (args[0] === 'pr')
+        return JSON.stringify([ghPr({ number: 7, headRefName: 'tm/fix/2-crash', body: 'Ticket: #2' })])
+      return JSON.stringify({
+        data: {
+          repository: {
+            pullRequest: {
+              reviewThreads: { nodes: [] },
+              reviews: { nodes: [{ body: 'Verdict: request-changes\nmissing tests' }, { body: 'Verdict: approve\nlgtm' }] },
+            },
+          },
+        },
+      })
+    })
+    const pr = await source.ticketPR('/r', ref('o/repo#2'), 'tm/effort/1')
+    expect(pr?.agentVerdict).toBe('approve')
+  })
+
+  it('leaves agentVerdict unset when no review carries a Verdict line', async () => {
+    const source = new GhPrSource(async (args) => {
+      if (args[0] === 'pr')
+        return JSON.stringify([ghPr({ number: 7, headRefName: 'tm/fix/2-crash', body: 'Ticket: #2' })])
+      return JSON.stringify({
+        data: { repository: { pullRequest: { reviewThreads: { nodes: [] }, reviews: { nodes: [{ body: 'just prose' }] } } } },
+      })
+    })
+    const pr = await source.ticketPR('/r', ref('o/repo#2'), 'tm/effort/1')
+    expect(pr?.agentVerdict).toBeUndefined()
   })
 
   it('flags an open PR GitHub reports as CONFLICTING, but never a merged one', async () => {

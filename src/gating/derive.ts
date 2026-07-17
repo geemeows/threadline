@@ -20,11 +20,20 @@ export function deriveStage(inputs: GateInputs): StageSnapshot {
   }
 }
 
-/** Needs-you notices that never block a gate (#26's `Ticket: #<n>` backstop). */
+/** Needs-you notices that never block a gate (#26's `Ticket: #<n>` backstop, #41's advisory verdict). */
 function collectWarnings(inputs: GateInputs): string[] {
-  return inputs.tickets
+  const warnings = inputs.tickets
     .filter((t) => t.pr && t.pr.state !== 'closed' && t.pr.missingTicketRef)
     .map((t) => `${t.ref.display}'s PR body is missing its "Ticket: #<n>" reference`)
+  // A merge is the human's call; a lingering or absent agent verdict is worth a flag, never a block (#41).
+  for (const t of inputs.tickets) {
+    if (t.pr?.state !== 'merged') continue
+    if (t.pr.agentVerdict === 'request-changes')
+      warnings.push(`${t.ref.display}'s PR was merged with the agent verdict still "request-changes"`)
+    else if (!t.pr.agentVerdict)
+      warnings.push(`${t.ref.display}'s PR was merged without an agent review verdict`)
+  }
+  return warnings
 }
 
 function evaluateGate(stage: Stage, inputs: GateInputs): GateStatus {

@@ -40,9 +40,11 @@ export class GhPrSource implements PRSource {
     const pr = pickPR((JSON.parse(out) as GhPr[]).filter((p) => pattern.test(p.headRefName)))
     if (!pr) return null
     const state = pr.state === 'MERGED' ? 'merged' : pr.state === 'OPEN' ? 'open' : 'closed'
-    // Closed-unmerged PRs are abandoned — thread state is irrelevant.
-    const unresolved = state === 'closed' ? 0 : await this.unresolvedThreads(repoDir, pr.number)
-    const info: PRInfo = { url: pr.url, state, unresolvedReviewThreads: unresolved }
+    // Closed-unmerged PRs are abandoned — thread/verdict state is irrelevant.
+    const review =
+      state === 'closed' ? { unresolved: 0 } : await this.reviewState(repoDir, pr.number)
+    const info: PRInfo = { url: pr.url, state, unresolvedReviewThreads: review.unresolved }
+    if (review.verdict) info.agentVerdict = review.verdict
     if (state === 'open' && pr.mergeable === 'CONFLICTING') info.conflicting = true
     // `Ticket: #<n>` body backstop (#26) — GitHub-tracker refs only; Linear
     // linkage rides the branch name itself. Warning, never a gate.
@@ -52,14 +54,20 @@ export class GhPrSource implements PRSource {
     return info
   }
 
-  private async unresolvedThreads(repoDir: string, prNumber: number): Promise<number> {
+  /** Threads and reviews ride one GraphQL call — same PR node, one round trip. */
+  private async reviewState(
+    repoDir: string,
+    prNumber: number,
+  ): Promise<{ unresolved: number; verdict?: 'approve' | 'request-changes' }> {
     const query =
-      'query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}}}}}'
+      'query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}} reviews(last:100){nodes{body}}}}}'
     const out = await this.exec(
       ['api', 'graphql', '-F', 'owner={owner}', '-F', 'repo={repo}', '-F', `number=${prNumber}`, '-f', `query=${query}`],
       repoDir,
     )
-    return countUnresolved(JSON.parse(out))
+    const graphql = JSON.parse(out)
+    const verdict = parseVerdict(reviewBodies(graphql))
+    return { unresolved: countUnresolved(graphql), ...(verdict && { verdict }) }
   }
 }
 
@@ -70,6 +78,26 @@ export function pickPR(prs: GhPr[]): GhPr | undefined {
     prs.find((p) => p.state === 'MERGED') ??
     prs[0]
   )
+}
+
+/**
+ * Latest advisory verdict (#41): reviews arrive oldest-first (`reviews(last:100)`),
+ * and the newest one carrying a `Verdict:` first line wins — re-reviews after
+ * fixes supersede earlier verdicts. Reviews without the line are ignored.
+ */
+export function parseVerdict(bodies: string[]): 'approve' | 'request-changes' | null {
+  for (let i = bodies.length - 1; i >= 0; i--) {
+    const first = (bodies[i] ?? '').split('\n', 1)[0]!.trim()
+    const match = /^verdict:\s*(approve|request-changes)$/i.exec(first)
+    if (match) return match[1]!.toLowerCase() as 'approve' | 'request-changes'
+  }
+  return null
+}
+
+export function reviewBodies(graphql: unknown): string[] {
+  const nodes = (graphql as { data?: { repository?: { pullRequest?: { reviews?: { nodes?: { body?: string }[] } } } } })
+    .data?.repository?.pullRequest?.reviews?.nodes
+  return nodes?.map((n) => n.body ?? '') ?? []
 }
 
 export function countUnresolved(graphql: unknown): number {

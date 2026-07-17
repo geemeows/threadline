@@ -27,7 +27,11 @@ function useStageSnapshot(effortId: string | null): { snapshot: StageSnapshot | 
       fetch(`/api/stage?effort=${encodeURIComponent(effortId)}`)
         .then((res) => (res.ok ? (res.json() as Promise<StageSnapshot>) : null))
         .then((snap) => {
-          if (alive && snap) setSnapshot(snap)
+          if (alive && snap) {
+            setSnapshot(snap)
+            // Advisory verdicts (#41): open request-changes PRs ride the Needs-you inbox.
+            store.syncVerdictNotices(effortId!, snap.tickets)
+          }
         })
         .catch(() => {})
     void pull()
@@ -320,6 +324,11 @@ function TicketList({ effortId, tickets, refresh }: { effortId: string; tickets:
               </a>
             ) : (
               <Pill>no PR</Pill>
+            )}
+            {t.pr?.agentVerdict && (
+              <Pill tone={t.pr.agentVerdict === 'approve' ? 'mint' : 'amber'}>
+                {t.pr.agentVerdict === 'approve' ? 'agent: approve' : 'agent: changes requested'}
+              </Pill>
             )}
             {t.pr?.conflicting && <Pill tone="red">conflicts with trunk</Pill>}
             <span className="flex-1" />

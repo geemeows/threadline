@@ -13,6 +13,7 @@ import type {
   SessionMeta,
   SetupStatus,
   StartSessionOptions,
+  TicketView,
   TranscriptEvent,
   Workspace,
   WorkspaceConfig,
@@ -25,11 +26,12 @@ export interface SessionView {
   transcriptLoaded: boolean
 }
 
-/** A pipeline outcome that needs the human (kept-dirty worktree after Complete) — rides the Needs-you queue. */
+/** A pipeline outcome that needs the human (kept-dirty worktree, agent request-changes verdict) — rides the Needs-you queue. */
 export interface PipelineNotice {
   id: string
   effort: string
   repo: string
+  title: string
   text: string
 }
 
@@ -294,6 +296,7 @@ export class Store {
         id: `${effort}:${wt}`,
         effort,
         repo: r.repo,
+        title: `Dirty worktree kept — ${r.repo}`,
         text: `Worktree kept — uncommitted work in ${wt}`,
       })),
     )
@@ -317,6 +320,33 @@ export class Store {
 
   dismissNotice(id: string) {
     this.set({ notices: this.state.notices.filter((n) => n.id !== id) })
+  }
+
+  /**
+   * Advisory verdict inbox rows (#41): an open PR whose latest agent verdict is
+   * request-changes rides the Needs-you queue. Re-synced from every stage poll,
+   * so rows appear and clear as PRs are re-reviewed or merged.
+   */
+  syncVerdictNotices(effort: string, tickets: TicketView[]) {
+    const prefix = `verdict:${effort}:`
+    const fresh = tickets
+      .filter((t) => t.pr?.state === 'open' && t.pr.agentVerdict === 'request-changes')
+      .map((t) => ({
+        id: `${prefix}${t.ref.id}`,
+        effort,
+        repo: t.ref.display,
+        title: `Agent requested changes — ${t.ref.display}`,
+        text: `Open PR's latest agent verdict is request-changes: ${t.pr!.url}`,
+      }))
+    const others = this.state.notices.filter((n) => !n.id.startsWith(prefix))
+    const next = [...others, ...fresh]
+    // Skip the set() when nothing changed — the rail polls every 15s.
+    if (
+      next.length !== this.state.notices.length ||
+      next.some((n, i) => n.id !== this.state.notices[i]?.id)
+    ) {
+      this.set({ notices: next })
+    }
   }
 
   selectEffort(effortId: string | null) {
