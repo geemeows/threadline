@@ -9,9 +9,11 @@ import type {
   PermissionDecision,
   ServerMessage,
   SessionMeta,
+  SetupStatus,
   StartSessionOptions,
   TranscriptEvent,
   Workspace,
+  WorkspaceConfig,
 } from './types.js'
 
 export interface SessionView {
@@ -33,6 +35,9 @@ export interface State {
   selectedStageIdx: number | null
   inboxOpen: boolean
   newSessionOpen: boolean
+  setup: SetupStatus | null
+  /** Panel visibility; forced open (guided mode) while the workspace isn't ready. */
+  setupOpen: boolean
   error: string | null
 }
 
@@ -50,6 +55,8 @@ export class Store {
     selectedStageIdx: null,
     inboxOpen: false,
     newSessionOpen: false,
+    setup: null,
+    setupOpen: false,
     error: null,
   }
   private listeners = new Set<Listener>()
@@ -90,6 +97,27 @@ export class Store {
     for (const meta of sessions ?? []) {
       if (meta.status === 'running') this.attach(meta.id)
     }
+    await this.refreshSetup()
+  }
+
+  /** Pull the readiness snapshot; guided mode opens the panel until ready (#7 §10). */
+  async refreshSetup() {
+    const setup = await fetchJson<SetupStatus>('/api/setup/status')
+    if (!setup) return
+    this.set({ setup, setupOpen: this.state.setupOpen || !setup.ready })
+  }
+
+  async saveSetupConfig(patch: Partial<WorkspaceConfig>): Promise<string | null> {
+    const res = await mutateJson('/api/setup/config', 'PUT', patch)
+    if (res.error) return res.error
+    await this.refreshSetup()
+    return null
+  }
+
+  setSetupOpen(open: boolean) {
+    // The main UI unlocks at ≥1 ready repo — until then the panel stays up.
+    if (!open && this.state.setup && !this.state.setup.ready) return
+    this.set({ setupOpen: open })
   }
 
   private connect() {
@@ -251,6 +279,26 @@ export class Store {
 // Guarded — unit tests import this module outside a browser.
 function storedTheme(): string | null {
   return typeof localStorage === 'undefined' ? null : localStorage.getItem('threadmap:theme')
+}
+
+/** POST/PUT helper for setup actions — surfaces the server's error string. */
+export async function mutateJson<T = unknown>(
+  url: string,
+  method: 'POST' | 'PUT',
+  body?: unknown,
+): Promise<{ data?: T; error?: string }> {
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+    const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null
+    if (!res.ok) return { error: data?.error ?? `HTTP ${res.status}` }
+    return { data: data as T }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {

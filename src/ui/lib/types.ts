@@ -8,6 +8,10 @@ export type { StartSessionOptions } from '../../server/registry.js'
 export type { SessionMeta, TranscriptEvent } from '../../server/transcripts.js'
 export type { ClientMessage, ServerMessage } from '../../server/ws.js'
 export type { RepoInfo, Workspace } from '../../server/workspace.js'
+export type { WorkspaceConfig } from '../../setup/config.js'
+export type { LinearOrgInfo, LinearTeam } from '../../setup/linear.js'
+export type { ApplyResult, DocPlanEntry } from '../../setup/docs.js'
+export type { RepoReadiness, SetupStatus } from '../../setup/status.js'
 
 /** Pipeline rail vocabulary: Setup is repo readiness (#6), then the five gated stages. */
 export const RAIL_STAGES = [
