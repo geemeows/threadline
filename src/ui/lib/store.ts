@@ -47,6 +47,8 @@ export interface State {
   selectedStageIdx: number | null
   inboxOpen: boolean
   newSessionOpen: boolean
+  /** ⌘K command palette (search over efforts + sessions). */
+  paletteOpen: boolean
   setup: SetupStatus | null
   /** Panel visibility; forced open (guided mode) while the workspace isn't ready. */
   setupOpen: boolean
@@ -68,6 +70,7 @@ export class Store {
     selectedStageIdx: null,
     inboxOpen: false,
     newSessionOpen: false,
+    paletteOpen: false,
     setup: null,
     setupOpen: false,
     notices: [],
@@ -391,6 +394,10 @@ export class Store {
 
   setNewSessionOpen(open: boolean) {
     this.set({ newSessionOpen: open })
+  }
+
+  setPaletteOpen(open: boolean) {
+    this.set({ paletteOpen: open })
   }
 
   setError(message: string) {

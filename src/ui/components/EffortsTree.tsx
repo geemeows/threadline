@@ -1,10 +1,32 @@
-// Left pane of the locked IA (#8): efforts tree with per-effort sessions,
-// plus the workspace-wide Needs-you section.
+// Left pane of the locked IA (#8), rebuilt on shadcn Sidebar (#64): efforts
+// tree with per-effort sessions, ad-hoc sessions, and the workspace-wide
+// Needs-you section. The search box opens the ⌘K palette.
 
+import { ChevronRight, Plus, Search } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarRail,
+} from '@/components/ui/sidebar'
+import { cn } from '@/lib/utils'
 import { adhocSessions, effortSessions, needsYou, sessionLabel } from '../lib/derive.js'
-import { store, useStore } from '../lib/store.js'
 import type { SessionRowView } from '../lib/derive.js'
-import { StatusDot } from './primitives.js'
+import { store, useStore } from '../lib/store.js'
+import { StatusDot } from './particles.js'
 
 export function EffortsTree() {
   const state = useStore()
@@ -12,73 +34,138 @@ export function EffortsTree() {
   const adhoc = adhocSessions(state)
 
   return (
-    <div className="overflow-y-auto p-[16px_12px_24px]" style={{ borderRight: '1px solid var(--border)', background: 'var(--panel)' }}>
-      <div className="brand">
-        <span className="mark">✦</span> threadmap
-        <span className="actions">
-          <button title="new session" onClick={() => store.setNewSessionOpen(true)}>
-            ＋
-          </button>
-        </span>
-      </div>
-      <div className="search">
-        <span className="dimmer">⌕</span>
-        <input placeholder="Search…" />
-        <kbd>⌘</kbd>
-        <kbd>K</kbd>
-      </div>
-
-      <div className="navsec">Efforts</div>
-      {state.efforts.length === 0 && (
-        <div className="dimmer px-[10px] py-1 text-[12.5px]">
-          No efforts yet — a <span className="mono">wayfinder:map</span> issue in a workspace repo becomes one.
+    <Sidebar>
+      <SidebarHeader>
+        <div className="flex items-center gap-1.5 px-2 pt-1">
+          <span aria-hidden className="text-primary">
+            ✦
+          </span>
+          <span className="text-sm font-semibold">threadmap</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="new session"
+            className="ml-auto"
+            onClick={() => store.setNewSessionOpen(true)}
+          >
+            <Plus />
+            <span className="sr-only">New session</span>
+          </Button>
         </div>
-      )}
-      {state.efforts.map((effort) => {
-        const active = state.selectedEffort === effort.ref.id
-        return (
-          <div key={effort.ref.id}>
-            <button className={`titem ${active ? 'active' : ''}`} onClick={() => store.selectEffort(effort.ref.id)}>
-              <span className="dimmer">{active ? '▾' : '▸'}</span>
-              <span className="min-w-0 flex-1 truncate">{effort.title}</span>
-            </button>
-            {active && (
-              <>
-                <div className="titem indent2 mono dimmer" style={{ cursor: 'default' }}>
-                  {effort.ref.display}
-                </div>
-                {effortSessions(state, effort.ref.id).map((row) => (
+        <InputGroup className="cursor-pointer bg-background" onClick={() => store.setPaletteOpen(true)}>
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
+            readOnly
+            tabIndex={-1}
+            placeholder="Search…"
+            className="cursor-pointer"
+            onFocus={(event) => {
+              event.currentTarget.blur()
+              store.setPaletteOpen(true)
+            }}
+          />
+          <InputGroupAddon align="inline-end">
+            <KbdGroup>
+              <Kbd>⌘</Kbd>
+              <Kbd>K</Kbd>
+            </KbdGroup>
+          </InputGroupAddon>
+        </InputGroup>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Efforts</SidebarGroupLabel>
+          <SidebarGroupContent>
+            {state.efforts.length === 0 && (
+              <div className="px-2 py-1 text-xs text-muted-foreground">
+                No efforts yet — a <span className="font-mono">wayfinder:map</span> issue in a workspace repo becomes
+                one.
+              </div>
+            )}
+            <SidebarMenu>
+              {state.efforts.map((effort) => {
+                const active = state.selectedEffort === effort.ref.id
+                return (
+                  <Collapsible key={effort.ref.id} open={active}>
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger
+                        render={
+                          <SidebarMenuButton isActive={active} onClick={() => store.selectEffort(effort.ref.id)} />
+                        }
+                      >
+                        <ChevronRight
+                          className={cn('text-muted-foreground transition-transform', active && 'rotate-90')}
+                        />
+                        <span>{effort.title}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          <SidebarMenuSubItem>
+                            <span className="flex h-6 items-center px-2 font-mono text-xs text-muted-foreground">
+                              {effort.ref.display}
+                            </span>
+                          </SidebarMenuSubItem>
+                          {effortSessions(state, effort.ref.id).map((row) => (
+                            <SidebarMenuSubItem key={row.view.meta.id}>
+                              <SidebarMenuSubButton
+                                size="sm"
+                                isActive={state.selectedSession === row.view.meta.id}
+                                render={<button type="button" onClick={() => store.selectSession(row.view.meta.id)} />}
+                              >
+                                <StatusDot status={row.status} />
+                                <span>{sessionLabel(row.view)}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {adhoc.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Ad-hoc sessions</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adhoc.map((row) => (
                   <SessionItem key={row.view.meta.id} row={row} active={state.selectedSession === row.view.meta.id} />
                 ))}
-              </>
-            )}
-          </div>
-        )
-      })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-      {adhoc.length > 0 && (
-        <>
-          <div className="navsec">Ad-hoc sessions</div>
-          {adhoc.map((row) => (
-            <SessionItem key={row.view.meta.id} row={row} active={state.selectedSession === row.view.meta.id} />
-          ))}
-        </>
-      )}
-
-      <div className="navsec">Needs you</div>
-      {queue.length === 0 && <div className="dimmer px-[10px] text-[12.5px]">Nothing waiting on you.</div>}
-      {queue.map((row) => (
-        <SessionItem key={row.view.meta.id} row={row} active={false} />
-      ))}
-    </div>
+        <SidebarGroup>
+          <SidebarGroupLabel>Needs you</SidebarGroupLabel>
+          <SidebarGroupContent>
+            {queue.length === 0 && <div className="px-2 text-xs text-muted-foreground">Nothing waiting on you.</div>}
+            <SidebarMenu>
+              {queue.map((row) => (
+                <SessionItem key={row.view.meta.id} row={row} active={false} />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarRail />
+    </Sidebar>
   )
 }
 
 function SessionItem({ row, active }: { row: SessionRowView; active: boolean }) {
   return (
-    <button className={`titem indent2 ${active ? 'active' : ''}`} onClick={() => store.selectSession(row.view.meta.id)}>
-      <StatusDot status={row.status} />
-      <span className="min-w-0 flex-1 truncate">{sessionLabel(row.view)}</span>
-    </button>
+    <SidebarMenuItem>
+      <SidebarMenuButton size="sm" isActive={active} onClick={() => store.selectSession(row.view.meta.id)}>
+        <StatusDot status={row.status} />
+        <span>{sessionLabel(row.view)}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   )
 }
