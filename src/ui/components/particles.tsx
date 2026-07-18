@@ -2,8 +2,17 @@
 // as dots and Badge pills, plus the cost badge. The redesigned surfaces use
 // these; the legacy panes keep primitives.tsx until their own rebuild.
 
+import { X } from 'lucide-react'
 import type { MouseEventHandler, ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { fmtTokens } from '../lib/derive.js'
 import type { SessionStatus, Usage } from '../lib/types.js'
@@ -118,6 +127,68 @@ export function MintPill({
       )}
       {children}
     </span>
+  )
+}
+
+/** OverlayShell: the shared mint modal chrome the design's overlays all share —
+ *  a top-anchored panel card (border2 hairline, 16px radius, depth shadow, dark
+ *  scrim) with a bordered header: title, an optional `afterTitle` slot (a pill /
+ *  ref / count beside the title), an optional `actions` slot, and a square close
+ *  button. Built on the Dialog primitive so focus-trap + Esc + a11y come free.
+ *  The body is the caller's — wrap scrolling content in its own scroll region. */
+export function OverlayShell({
+  open,
+  onOpenChange,
+  title,
+  description,
+  afterTitle,
+  actions,
+  width = 520,
+  className,
+  children,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: ReactNode
+  description?: string
+  afterTitle?: ReactNode
+  actions?: ReactNode
+  width?: number
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        overlayClassName="bg-black/55"
+        style={{ maxWidth: `min(${width}px, calc(100% - 2rem))`, borderRadius: 16 }}
+        className={cn(
+          'top-[8vh] flex max-h-[84vh] w-full translate-y-0 flex-col gap-0 overflow-hidden border border-[var(--border2)] bg-card p-0 shadow-[var(--shadow-depth)]',
+          className,
+        )}
+      >
+        <DialogHeader className="flex-row items-center gap-2.5 border-b border-border px-[18px] py-[15px]">
+          <DialogTitle className="text-[14px] leading-none font-semibold text-foreground">{title}</DialogTitle>
+          {afterTitle}
+          <span className="flex-1" />
+          {actions}
+          <DialogClose
+            render={
+              <button
+                type="button"
+                className="flex size-7 shrink-0 items-center justify-center rounded-[8px] border border-[var(--border2)] bg-secondary text-muted-foreground transition-colors hover:text-foreground"
+              />
+            }
+          >
+            <X className="size-3.5" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+          <DialogDescription className="sr-only">{description ?? 'Dialog'}</DialogDescription>
+        </DialogHeader>
+        {children}
+      </DialogContent>
+    </Dialog>
   )
 }
 
