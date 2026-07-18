@@ -2,7 +2,7 @@
 
 import type { SessionView, State } from './store.js'
 import { sessionStatus } from './transcript.js'
-import type { SessionStatus } from './types.js'
+import type { EffortSummary, SessionStatus } from './types.js'
 
 export interface SessionRowView {
   view: SessionView
@@ -35,6 +35,21 @@ export function needsYou(state: State): SessionRowView[] {
     .map((view) => ({ view, status: statusOf(view) }))
     .filter(({ status }) => status === 'needs-approval' || status === 'waiting-human')
     .sort((a, b) => (a.status === 'needs-approval' ? -1 : 1) - (b.status === 'needs-approval' ? -1 : 1))
+}
+
+/** An effort's aggregate status — the dot on its left-pane row. The pipeline
+ *  stage is a per-effort snapshot fetched only for the selected effort (#30),
+ *  too costly to pull for every row, so the row reads status from the effort's
+ *  own sessions instead: running wins, then a human-blocked session, else idle.
+ *  A closed effort reads as done regardless of stragglers. */
+export type EffortStatus = SessionStatus | 'idle'
+
+export function effortStatus(state: State, effort: EffortSummary): EffortStatus {
+  if (effort.state === 'closed') return 'done'
+  const rows = effortSessions(state, effort.ref.id)
+  if (rows.some((r) => r.status === 'running')) return 'running'
+  if (rows.some((r) => r.status === 'needs-approval' || r.status === 'waiting-human')) return 'needs-approval'
+  return 'idle'
 }
 
 export function costUsd(views: SessionView[]): number {
