@@ -90,7 +90,12 @@ export function CommandPalette() {
             <Inbox />
             Open inbox
           </CommandItem>
-          <CommandItem value="workspace setup" onSelect={run(() => store.setSetupOpen(true))}>
+          <CommandItem
+            value="workspace setup"
+            onSelect={run(() =>
+              state.setup?.ready === false ? store.setOnboarding(true) : store.setSetupOpen(true),
+            )}
+          >
             <Settings2 />
             Workspace setup
           </CommandItem>

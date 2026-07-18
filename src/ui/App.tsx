@@ -15,6 +15,7 @@ import { CommandPalette } from './components/CommandPalette.js'
 import { EffortsTree } from './components/EffortsTree.js'
 import { Inbox } from './components/Inbox.js'
 import { NewSessionDialog } from './components/NewSessionDialog.js'
+import { OnboardingWizard } from './components/OnboardingWizard.js'
 import { PipelineRail } from './components/PipelineRail.js'
 import { SessionPane } from './components/SessionPane.js'
 import { SetupPanel } from './components/SetupPanel.js'
@@ -49,6 +50,12 @@ export function App() {
       className="h-svh overflow-hidden bg-background p-3"
       style={{ '--sidebar-width': '266px' } as CSSProperties}
     >
+      {state.setup && state.onboarding ? (
+        // First-run takeover (#82): the wizard replaces the frame until the
+        // human enters the workspace (or hands off to a rescue session).
+        <OnboardingWizard />
+      ) : (
+        <>
       {/* floating rounded-card frame — the whole app sits inside one panel */}
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] border bg-card shadow-depth">
         <TopBar />
@@ -81,6 +88,8 @@ export function App() {
       <Inbox />
       <NewSessionDialog />
       <SetupPanel />
+        </>
+      )}
       <Toaster theme={state.theme} position="bottom-right" />
     </SidebarProvider>
   )

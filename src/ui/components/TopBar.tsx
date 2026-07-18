@@ -71,7 +71,8 @@ export function TopBar() {
         <button
           type="button"
           title="Workspace readiness"
-          onClick={() => store.setSetupOpen(true)}
+          // Unready workspace → back into the wizard; ready → readiness panel (#82).
+          onClick={() => (setupReady ? store.setSetupOpen(true) : store.setOnboarding(true))}
           className="relative flex size-8 items-center justify-center rounded-[9px] border border-input bg-muted transition-colors hover:bg-secondary"
         >
           <Settings2 className="size-4 text-muted-foreground" />

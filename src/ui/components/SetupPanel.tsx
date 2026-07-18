@@ -1,12 +1,11 @@
-// Setup wizard / readiness panel (#22, decisions in #7), rebuilt on shadcn
-// (Base UI) in the Soft Depth direction (#67): one Dialog, two modes. Guided
-// mode is the first-run wizard — non-dismissable (no close, no outside-press,
-// no Escape) until ≥1 repo is ready — and afterwards the identical checks live
-// behind a TopBar pill as the always-available readiness panel. Sections scroll
-// in a ScrollArea; every row is check-then-fix on Field/Checkbox/RadioGroup/
-// Input/Select, and docs plans render through the CodeBlock particle. Behavior
-// is unchanged from the #8 panel — the check text comes from GET
-// /api/setup/status, the buttons are the fixes.
+// Readiness panel (#22, decisions in #7), rebuilt on shadcn (Base UI) in the
+// Soft Depth direction (#67). First-run guided mode moved to the full-screen
+// OnboardingWizard (#82) — this Dialog is now the always-available readiness
+// view behind the TopBar gear, always dismissable, with a "Re-run guided
+// setup" escape back into the wizard. Sections scroll in a ScrollArea; every
+// row is check-then-fix on Field/Checkbox/RadioGroup/Input/Select, and docs
+// plans render through the CodeBlock particle. The check text comes from GET
+// /api/setup/status, the buttons are the fixes. (#83 restyles this to mint.)
 
 import { Check, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -72,30 +71,30 @@ function TonePill({
 export function SetupPanel() {
   const state = useStore()
   const setup = state.setup
-  const guided = !!setup && !setup.ready
 
   return (
-    <Dialog
-      open={state.setupOpen && !!setup}
-      // Guided mode is non-dismissable: block outside-press / Escape / close.
-      disablePointerDismissal={guided}
-      onOpenChange={(open) => {
-        if (!open && guided) return
-        store.setSetupOpen(open)
-      }}
-    >
+    <Dialog open={state.setupOpen && !!setup} onOpenChange={(open) => store.setSetupOpen(open)}>
       {setup && (
         <DialogContent
-          showCloseButton={!guided}
+          showCloseButton
           className="flex max-h-[86vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
         >
           <DialogHeader className="flex-row items-center gap-2.5 border-b p-4 pr-12">
-            <DialogTitle>{guided ? 'Workspace setup' : 'Readiness'}</DialogTitle>
-            {guided ? (
-              <TonePill tone="warning">setup required — the pipeline unlocks at 1 ready repo</TonePill>
-            ) : (
+            <DialogTitle>Readiness</DialogTitle>
+            {setup.ready ? (
               <TonePill tone="success">ready</TonePill>
+            ) : (
+              <TonePill tone="warning">setup required — the pipeline unlocks at 1 ready repo</TonePill>
             )}
+            <Button
+              variant="outline"
+              size="xs"
+              className="ml-auto"
+              onClick={() => store.setOnboarding(true)}
+              title="reopen the first-run wizard — change tracker, re-run every check"
+            >
+              Re-run guided setup
+            </Button>
             <DialogDescription className="sr-only">
               Check-then-fix workspace readiness: repos, tracker, auth, skills, and agent docs.
             </DialogDescription>

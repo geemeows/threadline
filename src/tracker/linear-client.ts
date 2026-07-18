@@ -50,6 +50,9 @@ export class LinearClient {
         Authorization: this.apiKey, // personal API key: no Bearer prefix (§8)
       },
       body: JSON.stringify({ query, variables }),
+      // A hung round-trip must never wedge callers — setup /status and the
+      // tracker-lock guard block on this when Linear is mis-picked (#82).
+      signal: AbortSignal.timeout(15_000),
     })
     const body = (await res.json().catch(() => null)) as {
       data?: T
