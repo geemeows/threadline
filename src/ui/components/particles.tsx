@@ -69,6 +69,22 @@ export function StatusBadge({
   )
 }
 
+/** Ticks: discrete micro-progress — `done` of `total` small segments filled.
+ *  Reads at a glance on the pipeline rail (e.g. ticket PRs merged). */
+export function Ticks({ done, total, className }: { done: number; total: number; className?: string }) {
+  if (total <= 0) return null
+  return (
+    <span aria-hidden className={cn('inline-flex items-center gap-0.5', className)}>
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className={cn('h-1 w-3 rounded-full transition-colors', i < done ? 'bg-success' : 'bg-muted-foreground/20')}
+        />
+      ))}
+    </span>
+  )
+}
+
 export function CostBadge({ usage, className }: { usage?: Usage; className?: string }) {
   if (!usage) return null
   const cost = usage.costUsd !== undefined ? `$${usage.costUsd.toFixed(2)}` : ''
