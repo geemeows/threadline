@@ -23,11 +23,11 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { store, useStore } from '../lib/store.js'
-import { RAIL_STAGES } from '../lib/types.js'
+import { PIPELINE_STAGES } from '../lib/types.js'
 
 const STAGE_ITEMS = [
   { value: '', label: '— none —' },
-  ...RAIL_STAGES.filter((s) => s.key !== 'setup').map((s) => ({ value: s.key, label: s.label })),
+  ...PIPELINE_STAGES.map((s) => ({ value: s.key, label: s.label })),
 ]
 
 export function NewSessionDialog() {
