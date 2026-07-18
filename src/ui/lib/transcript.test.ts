@@ -27,14 +27,23 @@ describe('reduceTranscript', () => {
     expect(items[1]).toEqual({ kind: 'agent', text: 'Hello there', streaming: false })
   })
 
-  it('renders tool calls as command rows and errors from tool results', () => {
+  it('pairs a tool call with its result onto one item, carrying input and output', () => {
     const events: TranscriptEvent[] = [
       { type: 'tool_call', name: 'Bash', input: { command: 'pnpm test' }, callId: 'c1', raw: {} },
       { type: 'tool_result', callId: 'c1', output: 'boom', isError: true, raw: {} },
     ]
     expect(reduceTranscript(meta, events).slice(1)).toEqual([
-      { kind: 'tool', text: '$ Bash pnpm test' },
-      { kind: 'tool', text: 'boom', error: true },
+      { kind: 'tool', callId: 'c1', name: 'Bash', input: { command: 'pnpm test' }, output: 'boom', error: true },
+    ])
+  })
+
+  it('keeps a successful tool result on its call item', () => {
+    const events: TranscriptEvent[] = [
+      { type: 'tool_call', name: 'Read', input: { file_path: '/a.ts' }, callId: 'c2', raw: {} },
+      { type: 'tool_result', callId: 'c2', output: 'file contents', isError: false, raw: {} },
+    ]
+    expect(reduceTranscript(meta, events).slice(1)).toEqual([
+      { kind: 'tool', callId: 'c2', name: 'Read', input: { file_path: '/a.ts' }, output: 'file contents', error: false },
     ])
   })
 

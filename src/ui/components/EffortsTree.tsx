@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Sidebar,
   SidebarContent,
@@ -78,7 +79,14 @@ export function EffortsTree() {
         <SidebarGroup>
           <SidebarGroupLabel>Efforts</SidebarGroupLabel>
           <SidebarGroupContent>
-            {state.efforts.length === 0 && (
+            {!state.loaded && (
+              <div className="flex flex-col gap-1.5 px-2 py-1">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-6 w-full" style={{ opacity: 1 - i * 0.25 }} />
+                ))}
+              </div>
+            )}
+            {state.loaded && state.efforts.length === 0 && (
               <div className="px-2 py-1 text-xs text-muted-foreground">
                 No efforts yet — a <span className="font-mono">wayfinder:map</span> issue in a workspace repo becomes
                 one.

@@ -30,7 +30,8 @@ export function TopBar() {
         {workspaceName}
       </span>
       {state.conn !== 'open' && (
-        <Badge variant="outline" className="border-transparent bg-warning/12 text-warning">
+        <Badge variant="outline" className="animate-enter-soft gap-1.5 border-transparent bg-warning/12 text-warning">
+          <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-warning" />
           {state.conn === 'connecting' ? 'connecting…' : 'reconnecting…'}
         </Badge>
       )}

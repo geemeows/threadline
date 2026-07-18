@@ -3,10 +3,19 @@
 
 import type { SessionMeta, SessionStatus, TranscriptEvent } from './types.js'
 
+export type ToolItem = {
+  kind: 'tool'
+  callId: string
+  name: string
+  input: unknown
+  output?: unknown
+  error?: boolean
+}
+
 export type ChatItem =
   | { kind: 'user'; text: string }
   | { kind: 'agent'; text: string; streaming?: boolean }
-  | { kind: 'tool'; text: string; error?: boolean }
+  | ToolItem
   | {
       kind: 'approval'
       id: string
@@ -19,6 +28,9 @@ export type ChatItem =
 export function reduceTranscript(meta: SessionMeta, events: TranscriptEvent[]): ChatItem[] {
   const items: ChatItem[] = [{ kind: 'user', text: meta.prompt }]
   let streaming: { kind: 'agent'; text: string; streaming?: boolean } | null = null
+  // A tool call and its result arrive as separate events sharing a callId; the
+  // redesigned tool particle shows both, so pair them onto one item.
+  const toolsByCall = new Map<string, ToolItem>()
 
   const closeStream = () => {
     if (streaming) streaming.streaming = false
@@ -45,15 +57,21 @@ export function reduceTranscript(meta: SessionMeta, events: TranscriptEvent[]): 
         }
         break
       }
-      case 'tool_call':
+      case 'tool_call': {
         closeStream()
-        items.push({ kind: 'tool', text: `$ ${event.name} ${summarizeInput(event.input)}`.trim() })
+        const tool: ToolItem = { kind: 'tool', callId: event.callId, name: event.name, input: event.input }
+        toolsByCall.set(event.callId, tool)
+        items.push(tool)
         break
-      case 'tool_result':
-        if (event.isError) {
-          items.push({ kind: 'tool', text: summarizeOutput(event.output), error: true })
+      }
+      case 'tool_result': {
+        const tool = toolsByCall.get(event.callId)
+        if (tool) {
+          tool.output = event.output
+          tool.error = event.isError
         }
         break
+      }
       case 'permission_request':
         closeStream()
         items.push({ kind: 'approval', id: event.id, tool: event.tool, input: event.input })
@@ -136,7 +154,7 @@ export function summarizeInput(input: unknown): string {
   return first ? truncate(first as string) : ''
 }
 
-function summarizeOutput(output: unknown): string {
+export function summarizeOutput(output: unknown): string {
   if (typeof output === 'string') return truncate(output, 400)
   return truncate(JSON.stringify(output) ?? '', 400)
 }

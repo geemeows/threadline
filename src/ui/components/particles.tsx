@@ -69,6 +69,22 @@ export function StatusBadge({
   )
 }
 
+/** Ticks: discrete micro-progress — `done` of `total` small segments filled.
+ *  Reads at a glance on the pipeline rail (e.g. ticket PRs merged). */
+export function Ticks({ done, total, className }: { done: number; total: number; className?: string }) {
+  if (total <= 0) return null
+  return (
+    <span aria-hidden className={cn('inline-flex items-center gap-0.5', className)}>
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className={cn('h-1 w-3 rounded-full transition-colors', i < done ? 'bg-success' : 'bg-muted-foreground/20')}
+        />
+      ))}
+    </span>
+  )
+}
+
 export function CostBadge({ usage, className }: { usage?: Usage; className?: string }) {
   if (!usage) return null
   const cost = usage.costUsd !== undefined ? `$${usage.costUsd.toFixed(2)}` : ''
@@ -77,5 +93,34 @@ export function CostBadge({ usage, className }: { usage?: Usage; className?: str
     <Badge variant="outline" title="cost · tokens in▸out" className={cn('font-mono text-muted-foreground', className)}>
       {[cost, tokens].filter(Boolean).join(' · ')}
     </Badge>
+  )
+}
+
+/** CodeBlock: a titled, scrollable mono panel for proposed file content / diffs
+ *  — the setup docs-plan review renders each planned file through this. The
+ *  header carries the file path (title) and an action tag (meta). */
+export function CodeBlock({
+  title,
+  meta,
+  children,
+  className,
+}: {
+  title?: ReactNode
+  meta?: ReactNode
+  children: string
+  className?: string
+}) {
+  return (
+    <div className={cn('overflow-hidden rounded-lg border bg-card/50', className)}>
+      {(title || meta) && (
+        <div className="flex items-center gap-2 border-b bg-muted/40 px-2.5 py-1.5">
+          {title && <span className="min-w-0 truncate font-mono text-xs font-medium text-foreground">{title}</span>}
+          {meta && <span className="ml-auto shrink-0 text-[11px] tracking-wide text-muted-foreground uppercase">{meta}</span>}
+        </div>
+      )}
+      <pre className="max-h-56 overflow-auto px-2.5 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+        {children}
+      </pre>
+    </div>
   )
 }
