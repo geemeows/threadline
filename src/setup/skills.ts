@@ -63,7 +63,24 @@ export async function installSkills(
 ): Promise<SkillsStatus> {
   const marker = await readMarker(paths.markerPath)
   if (marker !== pin || !(await exists(paths.canonicalDir))) {
-    await exec('npx', ['-y', 'skills', 'add', `mattpocock/skills#${pin}`, '--global'])
+    // `--skill '*' -y` selects every skill and skips confirmation, so the CLI
+    // never blocks on its interactive multi-select — that prompt, unanswerable
+    // under our no-TTY exec, is what hung the wizard on "Installing…". Scope to
+    // claude-code so it links only where we manage (the `--all` shorthand adds
+    // `--agent '*'`, fanning EACCES noise across every agent on the machine).
+    // We still relink below for the copy-fallback + marker.
+    await exec('npx', [
+      '-y',
+      'skills',
+      'add',
+      `mattpocock/skills#${pin}`,
+      '--global',
+      '--skill',
+      '*',
+      '--agent',
+      'claude-code',
+      '-y',
+    ])
   }
   await linkIntoAgents(paths)
   await mkdir(join(paths.markerPath, '..'), { recursive: true })

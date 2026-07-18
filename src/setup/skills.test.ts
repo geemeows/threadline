@@ -46,7 +46,22 @@ describe('skills install', () => {
     const paths = await makePaths()
     const { calls, exec } = fakeInstaller(paths)
     const status = await installSkills(paths, exec)
-    expect(calls[0]).toEqual(['npx', '-y', 'skills', 'add', `mattpocock/skills#${SKILLS_PIN}`, '--global'])
+    // Non-interactive flags (`--skill '*' -y`) keep the CLI's multi-select from
+    // blocking under our no-TTY exec; `--agent claude-code` avoids the `--all`
+    // fan-out to every agent on the machine.
+    expect(calls[0]).toEqual([
+      'npx',
+      '-y',
+      'skills',
+      'add',
+      `mattpocock/skills#${SKILLS_PIN}`,
+      '--global',
+      '--skill',
+      '*',
+      '--agent',
+      'claude-code',
+      '-y',
+    ])
     expect(status.ok).toBe(true)
     expect(status.installedPin).toBe(SKILLS_PIN)
     const link = await lstat(join(paths.agentDirs['claude-code']!, 'grilling'))
