@@ -299,7 +299,10 @@ function QuestionCard({
   stage?: string
   disconnected: boolean
 }) {
-  const interactive = stage === 'planning' && !item.answered
+  // The question tool is wired into planning sessions only, so a pending one is
+  // always answerable here; once answered it renders the recorded choices.
+  void stage
+  const interactive = !item.answered
   const [selected, setSelected] = useState<Record<string, string[]>>({})
 
   const toggle = (q: QuestionSpec, label: string) => {
@@ -387,19 +390,13 @@ function QuestionCard({
             </div>
           ))}
         </div>
-        {interactive ? (
+        {interactive && (
           <div className="mt-3 flex items-center gap-2.5">
             <Button size="sm" disabled={!allAnswered || disconnected} onClick={submit}>
               Send answer
             </Button>
             {disconnected && <span className="text-xs text-muted-foreground">Disconnected — reconnecting…</span>}
           </div>
-        ) : (
-          !item.answered && (
-            <div className="mt-2.5 text-[11.5px] text-[var(--fg3)]">
-              Answerable inline only in a planning session.
-            </div>
-          )
         )}
       </div>
     </div>

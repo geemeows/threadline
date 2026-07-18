@@ -80,9 +80,9 @@ export function reduceTranscript(meta: SessionMeta, events: TranscriptEvent[]): 
       }
       case 'tool_call': {
         closeStream()
-        // AskUserQuestion becomes an interactive question item (answered via a
-        // tool_result we route back), not a raw tool row.
-        if (event.name === 'AskUserQuestion') {
+        // The ask_user_questions tool becomes an interactive question item
+        // (answered via the MCP round-trip), not a raw tool row.
+        if (isQuestionTool(event.name)) {
           const question: QuestionItem = {
             kind: 'question',
             callId: event.callId,
@@ -102,7 +102,8 @@ export function reduceTranscript(meta: SessionMeta, events: TranscriptEvent[]): 
         const question = questionsByCall.get(event.callId)
         if (question) {
           question.answered = true
-          question.answers = extractAnswers(event.output)
+          const answers = extractAnswers(event.output)
+          if (answers) question.answers = answers
           break
         }
         const tool = toolsByCall.get(event.callId)
@@ -157,7 +158,7 @@ export function pendingApprovals(events: TranscriptEvent[]) {
 export function pendingQuestions(events: TranscriptEvent[]) {
   const pending = new Map<string, { callId: string }>()
   for (const event of events) {
-    if (event.type === 'tool_call' && event.name === 'AskUserQuestion') {
+    if (event.type === 'tool_call' && isQuestionTool(event.name)) {
       pending.set(event.callId, { callId: event.callId })
     } else if (event.type === 'tool_result') {
       pending.delete(event.callId)
@@ -185,7 +186,13 @@ export function sessionStatus(meta: SessionMeta, events: TranscriptEvent[]): Ses
   return 'running'
 }
 
-/** Parse the AskUserQuestion `input.questions` defensively — the model controls
+/** The interactive-question tool: the custom MCP one we host (headless), or the
+ *  built-in name (kept so older transcripts / tests still resolve). */
+function isQuestionTool(name: string): boolean {
+  return name === 'AskUserQuestion' || name.endsWith('__ask_user_questions')
+}
+
+/** Parse the question tool's `input.questions` defensively — the model controls
  *  this shape, so drop anything that doesn't have a question + option labels. */
 function extractQuestions(input: unknown): QuestionSpec[] {
   const raw = (input as { questions?: unknown })?.questions
@@ -210,11 +217,33 @@ function extractQuestions(input: unknown): QuestionSpec[] {
   return questions
 }
 
-/** Pull the `answers` map back out of the tool_result we recorded on answer. */
+/** Pull the `answers` map out of the question tool's result. The CLI delivers it
+ *  as a text content block carrying `{"answers":{…}}`, but tolerate a direct
+ *  object too. Returns undefined (never clobbers) when nothing parses. */
 function extractAnswers(output: unknown): Record<string, string | string[]> | undefined {
-  const answers = (output as { answers?: unknown })?.answers
-  if (typeof answers !== 'object' || answers === null) return undefined
-  return answers as Record<string, string | string[]>
+  const direct = (output as { answers?: unknown })?.answers
+  if (direct && typeof direct === 'object') return direct as Record<string, string | string[]>
+  const text = pullText(output)
+  if (text) {
+    try {
+      const parsed = JSON.parse(text) as { answers?: unknown }
+      if (parsed.answers && typeof parsed.answers === 'object') {
+        return parsed.answers as Record<string, string | string[]>
+      }
+    } catch {
+      // not JSON — no structured answers to show
+    }
+  }
+  return undefined
+}
+
+/** Flatten a tool_result output (string or MCP content-block array) to text. */
+function pullText(output: unknown): string {
+  if (typeof output === 'string') return output
+  if (Array.isArray(output)) {
+    return output.map((b) => (typeof (b as { text?: unknown })?.text === 'string' ? (b as { text: string }).text : '')).join('')
+  }
+  return ''
 }
 
 function extractText(content: unknown[]): string {

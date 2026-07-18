@@ -26,6 +26,8 @@ export interface StartOptions {
   prompt: string
   permissionPolicy: PermissionPolicy
   mcpConfig?: McpConfig
+  /** Appended to the CLI's system prompt (`--append-system-prompt`). */
+  appendSystemPrompt?: string
   model?: string
   env?: Record<string, string>
 }

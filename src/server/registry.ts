@@ -12,6 +12,11 @@ import type {
   StartOptions,
   UserMessage,
 } from '../adapters/index.js'
+import {
+  type QuestionAnswers,
+  QUESTION_MCP_KEY,
+  QUESTION_TOOL_FULLNAME,
+} from './question-mcp.js'
 import type { SessionMeta, TranscriptEvent } from './transcripts.js'
 import { TranscriptStore } from './transcripts.js'
 
@@ -37,11 +42,21 @@ interface LiveSession {
 
 export class SessionRegistry {
   private live = new Map<string, LiveSession>()
+  // Sessions blocked inside the ask_user_questions MCP tool, awaiting a UI
+  // answer. One per session — the agent can't call a second before the first
+  // returns. Rejected on session end so the tool degrades instead of hanging.
+  private pendingQuestions = new Map<
+    string,
+    { resolve: (a: QuestionAnswers) => void; reject: (e: Error) => void }
+  >()
 
   constructor(
     private adapters: Record<string, AgentAdapter>,
     private store = new TranscriptStore(),
     private now: () => string = () => new Date().toISOString(),
+    /** Base URL of threadmap's own HTTP server, e.g. `http://127.0.0.1:4664`.
+     *  When set, planning sessions get the question MCP tool wired in. */
+    private questionMcpBaseUrl?: string,
   ) {}
 
   start(opts: StartSessionOptions): SessionMeta {
@@ -106,21 +121,41 @@ export class SessionRegistry {
   }
 
   /**
-   * Answer an AskUserQuestion tool call. The CLI surfaces it as a normal
-   * tool_use, so the answer goes back as a tool_result user-message block
-   * (Claude Code's documented contract: `{questions, answers}`). The adapter
-   * stream won't echo it, so we also record the tool_result ourselves — that's
-   * what marks the question answered in a re-opened transcript.
+   * Answer the session's pending ask_user_questions call — resolves the promise
+   * the MCP tool handler is blocked on, which returns the answer to the CLI. The
+   * CLI then emits its own tool_result into the stream, so we don't record one.
    */
   answerQuestion(
     sessionId: string,
-    callId: string,
-    questions: unknown[],
-    answers: Record<string, string | string[]>,
+    _callId: string,
+    _questions: unknown[],
+    answers: QuestionAnswers,
   ): void {
-    const session = this.require(sessionId)
-    session.send({ content: [{ type: 'tool_result', tool_use_id: callId, content: { questions, answers } }] })
-    this.record(session, { type: 'tool_result', callId, output: { answers }, isError: false, raw: null })
+    const pending = this.pendingQuestions.get(sessionId)
+    if (!pending) return
+    this.pendingQuestions.delete(sessionId)
+    pending.resolve(answers)
+  }
+
+  /* ---- QuestionBridge: the question MCP server's in-process back-channel ---- */
+
+  /** Block until the session's question is answered in the UI (or it dies). */
+  awaitAnswer(sessionId: string): Promise<QuestionAnswers> {
+    this.pendingQuestions.get(sessionId)?.reject(new Error('superseded by a newer question'))
+    return new Promise<QuestionAnswers>((resolve, reject) => {
+      this.pendingQuestions.set(sessionId, { resolve, reject })
+    })
+  }
+
+  isLive(sessionId: string): boolean {
+    return this.live.has(sessionId)
+  }
+
+  private failPendingQuestion(sessionId: string, reason: string): void {
+    const pending = this.pendingQuestions.get(sessionId)
+    if (!pending) return
+    this.pendingQuestions.delete(sessionId)
+    pending.reject(new Error(reason))
   }
 
   interrupt(sessionId: string): void {
@@ -141,9 +176,12 @@ export class SessionRegistry {
     opts: StartSessionOptions,
     spawn: (o: StartOptions) => ReturnType<AgentAdapter['start']>,
   ): SessionMeta {
-    const session = spawn(opts)
+    // The MCP URL is per-session, so mint the id first and hand the adapter the
+    // options already carrying the question tool (planning sessions only).
+    const id = randomUUID()
+    const session = spawn(this.withQuestionTool(id, opts))
     const meta: SessionMeta = {
-      id: randomUUID(),
+      id,
       adapter: adapterName,
       cwd: opts.cwd,
       prompt: opts.prompt,
@@ -165,6 +203,30 @@ export class SessionRegistry {
     void this.store.writeMeta(meta).catch(() => {})
     void this.pump(entry, session.events)
     return meta
+  }
+
+  /** Wire the ask_user_questions MCP tool into planning sessions (no-op
+   *  otherwise): register the per-session HTTP MCP server and pre-approve the
+   *  tool so calling it never triggers a permission prompt. */
+  private withQuestionTool(id: string, opts: StartSessionOptions): StartSessionOptions {
+    if (!this.questionMcpBaseUrl || opts.stage !== 'planning') return opts
+    const servers = {
+      ...(opts.mcpConfig?.servers ?? {}),
+      [QUESTION_MCP_KEY]: { type: 'http', url: `${this.questionMcpBaseUrl}/mcp/${id}` },
+    }
+    const nudge =
+      `When a decision during planning is genuinely the user's to make, ask via the ` +
+      `${QUESTION_TOOL_FULLNAME} tool (multiple-choice, blocks for their answer) instead of asking in prose. ` +
+      `The built-in AskUserQuestion tool is unavailable here; this is its replacement.`
+    return {
+      ...opts,
+      mcpConfig: { servers, ...(opts.mcpConfig?.strict ? { strict: true } : {}) },
+      appendSystemPrompt: opts.appendSystemPrompt ? `${opts.appendSystemPrompt}\n\n${nudge}` : nudge,
+      permissionPolicy: {
+        ...opts.permissionPolicy,
+        allowedTools: [...(opts.permissionPolicy.allowedTools ?? []), QUESTION_TOOL_FULLNAME],
+      },
+    }
   }
 
   private async pump(entry: LiveSession, events: AsyncIterable<AgentEvent>): Promise<void> {
@@ -195,6 +257,9 @@ export class SessionRegistry {
       }
       await this.store.writeMeta(meta).catch(() => {})
       this.live.delete(meta.id)
+      // Anything still blocked in the question tool must unblock, or the CLI
+      // process (already gone) would leave the promise dangling forever.
+      this.failPendingQuestion(meta.id, 'session ended before the question was answered')
     }
   }
 

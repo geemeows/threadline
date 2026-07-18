@@ -23,7 +23,10 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true })
+  // Registry transcript writes are fire-and-forget; let in-flight appends settle
+  // before rm, or a concurrent write races the rmdir into ENOTEMPTY.
+  await new Promise((r) => setTimeout(r, 0))
+  await rm(dir, { recursive: true, force: true }).catch(() => {})
 })
 
 const startMsg = JSON.stringify({

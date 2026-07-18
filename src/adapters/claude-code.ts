@@ -91,6 +91,7 @@ export function buildArgs(opts: StartOptions, resumeToken?: string): string[] {
     args.push('--mcp-config', JSON.stringify({ mcpServers: opts.mcpConfig.servers }))
     if (opts.mcpConfig.strict) args.push('--strict-mcp-config')
   }
+  if (opts.appendSystemPrompt) args.push('--append-system-prompt', opts.appendSystemPrompt)
   if (opts.model) args.push('--model', opts.model)
   if (resumeToken) args.push('--resume', resumeToken)
   return args

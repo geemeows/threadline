@@ -156,3 +156,37 @@ describe('SessionRegistry', () => {
     expect(() => registry.subscribe('nope', () => {})).toThrow(RegistryError)
   })
 })
+
+describe('SessionRegistry question bridge', () => {
+  it('awaitAnswer resolves when the UI answers the pending question', async () => {
+    const meta = registry.start(startOpts)
+    const answerPromise = registry.awaitAnswer(meta.id)
+    registry.answerQuestion(meta.id, 'toolu_1', [], { 'Which?': 'A' })
+    expect(await answerPromise).toEqual({ 'Which?': 'A' })
+  })
+
+  it('awaitAnswer rejects when the session ends before an answer', async () => {
+    const meta = registry.start(startOpts)
+    const awaiting = registry.awaitAnswer(meta.id)
+    adapter.sessions[0]!.emit({ type: 'session_ended', outcome: 'completed', resumable: false, raw: {} })
+    await expect(awaiting).rejects.toThrow(/session ended/)
+  })
+
+  it('wires the question MCP tool into planning sessions only when a base URL is set', () => {
+    const withUrl = new SessionRegistry({ fake: adapter }, store, undefined, 'http://127.0.0.1:4664')
+    withUrl.start(startOpts)
+    const opts = adapter.sessions[0]!.opts
+    const servers = opts.mcpConfig?.servers as Record<string, { url: string }>
+    expect(servers.threadmap?.url).toMatch(/^http:\/\/127\.0\.0\.1:4664\/mcp\//)
+    expect(opts.permissionPolicy.allowedTools).toContain('mcp__threadmap__ask_user_questions')
+    expect(opts.appendSystemPrompt).toMatch(/ask_user_questions/)
+  })
+
+  it('does not wire the tool into non-planning sessions', () => {
+    const withUrl = new SessionRegistry({ fake: adapter }, store, undefined, 'http://127.0.0.1:4664')
+    withUrl.start({ ...startOpts, stage: 'implement' })
+    const opts = adapter.sessions[0]!.opts
+    expect(opts.mcpConfig).toBeUndefined()
+    expect(opts.appendSystemPrompt).toBeUndefined()
+  })
+})

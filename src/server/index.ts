@@ -13,6 +13,7 @@ import { listEfforts } from './efforts.js'
 import { createPipelineApp, type OverrideContext } from './pipeline-routes.js'
 import { SessionRegistry } from './registry.js'
 import { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
+import { handleMcpMessage } from './question-mcp.js'
 import { createStageService, createTrackerContext, trackerWhoami, type StageService, type TrackerContext } from './stage.js'
 import { TranscriptStore } from './transcripts.js'
 import { createConnection } from './ws.js'
@@ -135,6 +136,23 @@ export function createApp(deps: AppDeps) {
     c.json(await store.readEvents(c.req.param('id'))),
   )
 
+  // Per-session MCP endpoint hosting the ask_user_questions tool (see
+  // question-mcp.ts). A planning agent's tool call lands here; the handler
+  // blocks on registry.awaitAnswer until the user answers in the UI.
+  app.post('/mcp/:sessionId', async (c) => {
+    const msg = await c.req.json().catch(() => null)
+    if (msg === null) {
+      return c.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }, 400)
+    }
+    const res = await handleMcpMessage(c.req.param('sessionId'), msg, registry)
+    if (res.status === 202) return c.body(null, 202)
+    return c.json(res.body, res.status as 200, res.headers)
+  })
+  // The CLI may probe GET (server-initiated SSE) and DELETE (session close);
+  // this synchronous server needs neither — answer politely so it moves on.
+  app.get('/mcp/:sessionId', (c) => c.body(null, 405))
+  app.delete('/mcp/:sessionId', (c) => c.body(null, 200))
+
   app.get(
     '/ws',
     upgradeWebSocket(() => {
@@ -159,7 +177,14 @@ export function createApp(deps: AppDeps) {
 export async function startServer(port = DEFAULT_PORT, root = process.cwd()) {
   const workspace = await discoverWorkspace(root)
   const store = new TranscriptStore()
-  const registry = new SessionRegistry({ 'claude-code': new ClaudeCodeAdapter() }, store)
+  // The question MCP tool calls back into this same server; 127.0.0.1 keeps that
+  // loopback local (the CLI runs on the same host).
+  const registry = new SessionRegistry(
+    { 'claude-code': new ClaudeCodeAdapter() },
+    store,
+    undefined,
+    `http://127.0.0.1:${port}`,
+  )
   const { app, injectWebSocket } = createApp({ workspace, registry, store })
 
   // dist layout: dist/server.js next to dist/ui/
