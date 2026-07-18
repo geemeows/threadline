@@ -71,10 +71,10 @@ export function EffortsTree() {
             tabIndex={-1}
             placeholder="Search efforts, tickets, repos…"
             className="cursor-pointer text-[12.5px]"
-            onFocus={(event) => {
-              event.currentTarget.blur()
-              store.setPaletteOpen(true)
-            }}
+            // Button in disguise: don't let it grab focus on click, or the
+            // resulting focusout dismisses the palette it just opened. Opening
+            // is handled by the InputGroup's onClick.
+            onMouseDown={(event) => event.preventDefault()}
           />
           <InputGroupAddon align="inline-end">
             <KbdGroup>
