@@ -55,7 +55,9 @@ function CommandDialog({
       </DialogHeader>
       <DialogContent
         className={cn(
-          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
+          // Mint palette shell (#84): a floating card near the top, on the mint
+          // border2 hairline + depth shadow the other overlays use (no ring).
+          "top-[12vh] w-full translate-y-0 overflow-hidden rounded-[14px]! border border-[var(--border2)] p-0 shadow-[var(--shadow-depth)] ring-0 sm:max-w-[560px]",
           className
         )}
         showCloseButton={showCloseButton}
@@ -71,8 +73,8 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div data-slot="command-input-wrapper" className="p-1 pb-0">
-      <InputGroup className="h-8! rounded-lg! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
+    <div data-slot="command-input-wrapper" className="border-b border-border p-2.5">
+      <InputGroup className="h-9! rounded-[10px]! border-[var(--border2)] bg-input/40 shadow-none! *:data-[slot=input-group-addon]:pl-2.5! focus-within:border-[color:var(--mint-line)] focus-within:ring-2 focus-within:ring-[color:var(--mint-tint)]">
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
@@ -112,7 +114,7 @@ function CommandEmpty({
   return (
     <CommandPrimitive.Empty
       data-slot="command-empty"
-      className={cn("py-6 text-center text-sm", className)}
+      className={cn("py-8 text-center text-sm text-muted-foreground", className)}
       {...props}
     />
   )
@@ -126,7 +128,8 @@ function CommandGroup({
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        "overflow-hidden p-1 text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-muted-foreground",
+        // Mint (#84): group headings echo the SectionLabel particle — uppercase, tight tracking, tertiary tone.
+        "overflow-hidden p-1 text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-[11px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.04em] **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:text-[var(--fg3)]",
         className
       )}
       {...props}
@@ -156,7 +159,8 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "group/command-item relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
+        // Mint (#84): selected rows fill with mint-tint (accent) instead of muted grey.
+        "group/command-item relative flex cursor-default items-center gap-2 rounded-sm px-2 py-2 text-[13px] outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-accent data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-primary",
         className
       )}
       {...props}

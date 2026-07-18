@@ -290,6 +290,12 @@ button {
   animation: tl-spin 0.9s linear infinite;
 }
 
+/* Toasts (#84): the mint floating-card feel — the shell's depth shadow on
+   sonner's toast surface (bg/border/radius come from the CSS vars in sonner.tsx). */
+.cn-toast {
+  box-shadow: var(--shadow-depth);
+}
+
 /* Reduced motion: neutralize every animation/transition across the redesign
    (animate-pulse/spin/in/out, collapsibles, fades). */
 @media (prefers-reduced-motion: reduce) {

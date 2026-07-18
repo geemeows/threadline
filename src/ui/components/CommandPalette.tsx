@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/command'
 import { sessionLabel, statusOf } from '../lib/derive.js'
 import { store, useStore } from '../lib/store.js'
-import { StatusDot } from './particles.js'
+import { RefBadge, StatusDot } from './particles.js'
 
 export function CommandPalette() {
   const state = useStore()
@@ -61,7 +61,7 @@ export function CommandPalette() {
               >
                 <FolderGit2 />
                 <span className="min-w-0 flex-1 truncate">{effort.title}</span>
-                <span className="font-mono text-xs text-muted-foreground">{effort.ref.display}</span>
+                <RefBadge>{effort.ref.display}</RefBadge>
               </CommandItem>
             ))}
           </CommandGroup>

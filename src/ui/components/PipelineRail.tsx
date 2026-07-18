@@ -450,7 +450,7 @@ function OverrideGate({
           <TriangleAlert />
           Override gate…
         </AlertDialogTrigger>
-        <AlertDialogContent className="flex flex-col gap-4">
+        <AlertDialogContent className="flex flex-col gap-4 rounded-[14px] border border-[var(--border2)] bg-card p-[18px] ring-0 shadow-[var(--shadow-depth)] sm:max-w-[440px]!">
           <div className="flex flex-col gap-1">
             <h3 className="flex items-center gap-2 text-base font-medium">
               <TriangleAlert className="size-4 text-warning" />

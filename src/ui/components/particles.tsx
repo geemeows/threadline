@@ -161,7 +161,6 @@ export function OverlayShell({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        overlayClassName="bg-black/55"
         style={{ maxWidth: `min(${width}px, calc(100% - 2rem))`, borderRadius: 16 }}
         className={cn(
           'top-[8vh] flex max-h-[84vh] w-full translate-y-0 flex-col gap-0 overflow-hidden border border-[var(--border2)] bg-card p-0 shadow-[var(--shadow-depth)]',
