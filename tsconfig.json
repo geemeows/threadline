@@ -10,7 +10,9 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/ui/*"] }
   },
   "include": ["src"]
 }

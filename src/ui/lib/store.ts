@@ -37,6 +37,8 @@ export interface PipelineNotice {
 
 export interface State {
   conn: 'connecting' | 'open' | 'closed'
+  /** False until the first REST snapshot lands — panes show skeletons, not a false-empty. */
+  loaded: boolean
   theme: 'dark' | 'light'
   workspace: Workspace | null
   efforts: EffortSummary[]
@@ -47,6 +49,8 @@ export interface State {
   selectedStageIdx: number | null
   inboxOpen: boolean
   newSessionOpen: boolean
+  /** ⌘K command palette (search over efforts + sessions). */
+  paletteOpen: boolean
   setup: SetupStatus | null
   /** Panel visibility; forced open (guided mode) while the workspace isn't ready. */
   setupOpen: boolean
@@ -59,6 +63,7 @@ type Listener = () => void
 export class Store {
   private state: State = {
     conn: 'connecting',
+    loaded: false,
     theme: (storedTheme() as 'dark' | 'light') ?? 'dark',
     workspace: null,
     efforts: [],
@@ -68,6 +73,7 @@ export class Store {
     selectedStageIdx: null,
     inboxOpen: false,
     newSessionOpen: false,
+    paletteOpen: false,
     setup: null,
     setupOpen: false,
     notices: [],
@@ -103,6 +109,7 @@ export class Store {
       views[meta.id] ??= { meta, events: [], transcriptLoaded: false }
     }
     this.set({
+      loaded: true,
       workspace: workspace ?? null,
       efforts: efforts ?? [],
       sessions: views,
@@ -391,6 +398,10 @@ export class Store {
 
   setNewSessionOpen(open: boolean) {
     this.set({ newSessionOpen: open })
+  }
+
+  setPaletteOpen(open: boolean) {
+    this.set({ paletteOpen: open })
   }
 
   setError(message: string) {
