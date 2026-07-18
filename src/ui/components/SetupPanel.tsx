@@ -1,19 +1,22 @@
-// Setup wizard / readiness panel (#22, decisions in #7), rebuilt on shadcn
-// (Base UI) in the Soft Depth direction (#67): one Dialog, two modes. Guided
-// mode is the first-run wizard — non-dismissable (no close, no outside-press,
-// no Escape) until ≥1 repo is ready — and afterwards the identical checks live
-// behind a TopBar pill as the always-available readiness panel. Sections scroll
-// in a ScrollArea; every row is check-then-fix on Field/Checkbox/RadioGroup/
-// Input/Select, and docs plans render through the CodeBlock particle. Behavior
-// is unchanged from the #8 panel — the check text comes from GET
-// /api/setup/status, the buttons are the fixes.
+// Readiness panel (#22, decisions in #7), rebuilt to the mint Threadline
+// Workspace design (#83) on the shared OverlayShell particle (#78 vocabulary).
+// First-run guided mode lives in the full-screen OnboardingWizard (#82); this
+// modal is the always-available readiness view behind the TopBar gear, with a
+// "Re-run guided setup" escape back into the wizard.
+//
+// Shape: the mockup's flat status rows — each an ok/warn dot + label + one-line
+// detail + at most one quick action. Locked hybrid with the human (like the
+// #79/#80/#81 expandable rebuilds): each row EXPANDS inline to the restyled
+// check-then-fix controls the mockup omits — repo toggles, tracker radios, the
+// auth key/re-check, teams/labels provisioning, per-repo docs plans — so every
+// post-onboarding fix stays reachable without leaving for the wizard. The check
+// text comes from GET /api/setup/status; the controls are the fixes.
 
-import { Check, Wand2 } from 'lucide-react'
+import { Check, ChevronDown, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -22,7 +25,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { mutateJson, store, useStore } from '../lib/store.js'
 import type { DocPlanEntry, GitHubProvisionResult, LinearOrgInfo, LinearTeam, SetupStatus } from '../lib/types.js'
-import { CodeBlock } from './particles.js'
+import { CodeBlock, MintPill, OverlayShell } from './particles.js'
 
 const DOC_AGENT_PROMPT = [
   'Run /setup-matt-pocock-skills for this repository.',
@@ -40,7 +43,126 @@ const SKILLS_AGENT_PROMPT = [
   '(npx availability, permissions, symlink support) and fix it.',
 ].join(' ')
 
-/** Soft Depth tone pill — the setup panel's ✓ / • / status markers on Badge. */
+export function SetupPanel() {
+  const state = useStore()
+  const setup = state.setup
+
+  return (
+    <OverlayShell
+      open={state.setupOpen && !!setup}
+      onOpenChange={(open) => store.setSetupOpen(open)}
+      title="Readiness"
+      description="Check-then-fix workspace readiness: repos, tracker, auth, skills, and agent docs."
+      width={620}
+      afterTitle={
+        setup &&
+        (setup.ready ? (
+          <MintPill className="px-[9px] py-0.5 text-[11px]">ready</MintPill>
+        ) : (
+          <span
+            className="rounded-full border px-[9px] py-0.5 text-[11px] font-semibold text-warning"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--amber) 40%, transparent)',
+              background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
+            }}
+          >
+            setup required — the pipeline unlocks at 1 ready repo
+          </span>
+        ))
+      }
+      actions={
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => store.setOnboarding(true)}
+          title="reopen the first-run wizard — change tracker, re-run every check"
+        >
+          Re-run guided setup
+        </Button>
+      }
+    >
+      {setup && (
+        <ScrollArea className="max-h-[70vh]">
+          <div className="flex flex-col gap-[9px] px-[18px] py-3.5">
+            <ReposSection setup={setup} />
+            <TrackerSection setup={setup} />
+            <AuthSection setup={setup} />
+            {setup.tracker === 'linear' && <TeamsSection setup={setup} />}
+            {setup.tracker === 'github' && <LabelsSection setup={setup} />}
+            <SkillsSection setup={setup} />
+            <DocsSection setup={setup} />
+          </div>
+        </ScrollArea>
+      )}
+    </OverlayShell>
+  )
+}
+
+/* ---------- shared row chrome: the mockup's flat status row + inline expand ---------- */
+
+function OkDot({ ok }: { ok: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+        ok ? 'bg-primary text-primary-foreground' : 'text-warning',
+      )}
+      style={ok ? undefined : { background: 'color-mix(in srgb, var(--amber) 20%, transparent)' }}
+    >
+      {ok ? <Check className="size-3" /> : '!'}
+    </span>
+  )
+}
+
+function Row({
+  label,
+  ok,
+  detail,
+  action,
+  defaultOpen,
+  children,
+}: {
+  label: string
+  ok: boolean
+  detail: React.ReactNode
+  action?: React.ReactNode
+  defaultOpen?: boolean
+  children?: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen ?? false)
+  const expandable = !!children
+  return (
+    <div className="overflow-hidden rounded-[10px] border border-border bg-popover">
+      <div className="flex items-center gap-3 px-3.5 py-3">
+        <OkDot ok={ok} />
+        <button
+          type="button"
+          disabled={!expandable}
+          onClick={() => setOpen((v) => !v)}
+          className="min-w-0 flex-1 text-left disabled:cursor-default"
+        >
+          <div className="text-[13px] font-semibold text-foreground">{label}</div>
+          <div className="mt-px truncate text-[11.5px] text-[var(--fg3)]">{detail}</div>
+        </button>
+        {action}
+        {expandable && (
+          <button
+            type="button"
+            aria-label={open ? 'Collapse' : 'Expand'}
+            onClick={() => setOpen((v) => !v)}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} />
+          </button>
+        )}
+      </div>
+      {open && expandable && <div className="border-t border-border bg-card px-3.5 py-3">{children}</div>}
+    </div>
+  )
+}
+
+/** Soft mint/amber tone pill — the setup panel's ✓ / • / status markers. */
 function TonePill({
   tone = 'muted',
   children,
@@ -69,67 +191,6 @@ function TonePill({
   )
 }
 
-export function SetupPanel() {
-  const state = useStore()
-  const setup = state.setup
-  const guided = !!setup && !setup.ready
-
-  return (
-    <Dialog
-      open={state.setupOpen && !!setup}
-      // Guided mode is non-dismissable: block outside-press / Escape / close.
-      disablePointerDismissal={guided}
-      onOpenChange={(open) => {
-        if (!open && guided) return
-        store.setSetupOpen(open)
-      }}
-    >
-      {setup && (
-        <DialogContent
-          showCloseButton={!guided}
-          className="flex max-h-[86vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
-        >
-          <DialogHeader className="flex-row items-center gap-2.5 border-b p-4 pr-12">
-            <DialogTitle>{guided ? 'Workspace setup' : 'Readiness'}</DialogTitle>
-            {guided ? (
-              <TonePill tone="warning">setup required — the pipeline unlocks at 1 ready repo</TonePill>
-            ) : (
-              <TonePill tone="success">ready</TonePill>
-            )}
-            <DialogDescription className="sr-only">
-              Check-then-fix workspace readiness: repos, tracker, auth, skills, and agent docs.
-            </DialogDescription>
-          </DialogHeader>
-
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="flex flex-col gap-4 p-4">
-              <ReposSection setup={setup} />
-              <TrackerSection setup={setup} />
-              <AuthSection setup={setup} />
-              {setup.tracker === 'linear' && <TeamsSection setup={setup} />}
-              {setup.tracker === 'github' && <LabelsSection setup={setup} />}
-              <SkillsSection setup={setup} />
-              <DocsSection setup={setup} />
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      )}
-    </Dialog>
-  )
-}
-
-function Section({ title, ok, children }: { title: string; ok: boolean; children: React.ReactNode }) {
-  return (
-    <section className="rounded-lg border p-3.5">
-      <div className="mb-2 flex items-center gap-2">
-        <TonePill tone={ok ? 'success' : 'warning'}>{ok ? <Check className="size-3" /> : '•'}</TonePill>
-        <b className="text-sm">{title}</b>
-      </div>
-      {children}
-    </section>
-  )
-}
-
 /* ---------- 1. repos: scan-children discovery with confirm (#7 §1) ---------- */
 
 function ReposSection({ setup }: { setup: SetupStatus }) {
@@ -143,8 +204,13 @@ function ReposSection({ setup }: { setup: SetupStatus }) {
     setError(await store.saveSetupConfig({ repos: next }))
   }
 
+  const detail =
+    setup.repos.length > 0
+      ? `${setup.repos.length} confirmed · ${setup.repos.map((r) => r.name).join(', ')}`
+      : 'no repos confirmed yet'
+
   return (
-    <Section title="Repos" ok={setup.repos.length > 0}>
+    <Row label="Repos" ok={setup.repos.length > 0} detail={detail}>
       <div className="flex flex-col gap-2">
         {discovered.map((repo) => (
           <label key={repo.name} className="flex cursor-pointer items-center gap-2">
@@ -157,7 +223,7 @@ function ReposSection({ setup }: { setup: SetupStatus }) {
         )}
       </div>
       {error && <ErrorLine text={error} />}
-    </Section>
+    </Row>
   )
 }
 
@@ -169,8 +235,11 @@ function TrackerSection({ setup }: { setup: SetupStatus }) {
     if (tracker !== 'github' && tracker !== 'linear') return
     setError(await store.saveSetupConfig({ tracker }))
   }
+  const name = setup.tracker === 'github' ? 'GitHub Issues' : setup.tracker === 'linear' ? 'Linear' : 'not set'
+  const detail = setup.tracker ? `${name}${setup.trackerLocked ? ' · locked (efforts exist)' : ''}` : 'not set'
+
   return (
-    <Section title="Tracker" ok={setup.tracker !== null}>
+    <Row label="Tracker" ok={setup.tracker !== null} detail={detail}>
       <div className="flex items-center gap-4">
         <RadioGroup
           value={setup.tracker ?? ''}
@@ -195,7 +264,7 @@ function TrackerSection({ setup }: { setup: SetupStatus }) {
         )}
       </div>
       {error && <ErrorLine text={error} />}
-    </Section>
+    </Row>
   )
 }
 
@@ -218,9 +287,16 @@ function AuthSection({ setup }: { setup: SetupStatus }) {
     await store.refreshSetup()
   }
 
+  const isGithub = setup.tracker === 'github'
+  const action =
+    isGithub && !setup.auth.ok ? (
+      <Button variant="outline" size="sm" className="shrink-0" onClick={() => void store.refreshSetup()}>
+        Check
+      </Button>
+    ) : undefined
+
   return (
-    <Section title="Auth" ok={setup.auth.ok}>
-      <div className="mb-2 text-sm text-muted-foreground">{setup.auth.detail}</div>
+    <Row label="Auth" ok={setup.auth.ok} detail={setup.auth.detail} action={action}>
       {setup.tracker === 'linear' ? (
         <div className="flex items-center gap-2">
           <Input type="password" placeholder="lin_api_…" value={key} onChange={(e) => setKey(e.target.value)} />
@@ -243,7 +319,7 @@ function AuthSection({ setup }: { setup: SetupStatus }) {
         </div>
       )}
       {error && <ErrorLine text={error} />}
-    </Section>
+    </Row>
   )
 }
 
@@ -296,9 +372,12 @@ function TeamsSection({ setup }: { setup: SetupStatus }) {
     setProvisioned(true)
   }
 
-  const mapped = setup.repos.every((r) => r.teamId)
+  const mappedCount = setup.repos.filter((r) => r.teamId).length
+  const mapped = setup.repos.length > 0 && mappedCount === setup.repos.length
+  const detail = mapped ? 'every repo routes to a team' : `${mappedCount}/${setup.repos.length} repos mapped`
+
   return (
-    <Section title="Teams" ok={mapped}>
+    <Row label="Teams" ok={mapped} detail={detail}>
       <div className="flex flex-col gap-1.5">
         {setup.repos.map((repo) => {
           const options = teams ?? prefill(repo.teamId)
@@ -344,7 +423,7 @@ function TeamsSection({ setup }: { setup: SetupStatus }) {
         </Button>
       </div>
       {error && <ErrorLine text={error} />}
-    </Section>
+    </Row>
   )
 }
 
@@ -365,30 +444,36 @@ function LabelsSection({ setup }: { setup: SetupStatus }) {
   }
 
   const allOk = results !== null && results.every((r) => r.ok)
+  const detail = allOk ? 'label vocabulary stamped in every repo' : 'stamp the threadmap label vocabulary'
+  const action = (
+    <Button
+      size="sm"
+      className="shrink-0"
+      disabled={busy || setup.repos.length === 0 || !setup.auth.ok}
+      onClick={() => void provision()}
+      title="gh label create the wayfinder:*/threadmap:* vocabulary in every confirmed repo"
+    >
+      {busy && <Spinner />}
+      {busy ? 'Stamping…' : allOk ? 'Provisioned' : 'Provision'}
+    </Button>
+  )
+
   return (
-    <Section title="Labels" ok={allOk}>
+    <Row label="Labels" ok={allOk} detail={detail} action={action}>
       <div className="mb-2 text-sm text-muted-foreground">
         Stamp the threadmap label vocabulary into each confirmed repo — sessions fail to create labelled issues
         without it.
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          disabled={busy || setup.repos.length === 0 || !setup.auth.ok}
-          onClick={() => void provision()}
-          title="gh label create the wayfinder:*/threadmap:* vocabulary in every confirmed repo"
-        >
-          {busy && <Spinner />}
-          {busy ? 'Stamping…' : allOk ? 'Provisioned' : 'Provision labels'}
-        </Button>
         {results?.map((r) => (
           <TonePill key={r.name} tone={r.ok ? 'success' : 'warning'} title={r.detail}>
             {r.ok ? '✓' : '!'} {r.name}
           </TonePill>
         ))}
+        {!results && <span className="text-sm text-muted-foreground">Not provisioned yet.</span>}
       </div>
       {error && <ErrorLine text={error} />}
-    </Section>
+    </Row>
   )
 }
 
@@ -424,8 +509,15 @@ function SkillsSection({ setup }: { setup: SetupStatus }) {
     store.setSetupOpen(false)
   }
 
+  const action = !setup.skills.ok ? (
+    <Button size="sm" className="shrink-0" disabled={busy} onClick={() => void install()}>
+      {busy && <Spinner />}
+      {busy ? 'Installing…' : 'Install'}
+    </Button>
+  ) : undefined
+
   return (
-    <Section title="Skills" ok={setup.skills.ok}>
+    <Row label="Skills" ok={setup.skills.ok} detail={`mattpocock/skills#${setup.skills.pin} — ${setup.skills.detail}`} action={action}>
       <div className="mb-2 text-sm text-muted-foreground">
         <span className="font-mono">mattpocock/skills#{setup.skills.pin}</span> — {setup.skills.detail}
       </div>
@@ -442,7 +534,7 @@ function SkillsSection({ setup }: { setup: SetupStatus }) {
         )}
       </div>
       {error && <ErrorLine text={error} />}
-    </Section>
+    </Row>
   )
 }
 
@@ -450,14 +542,18 @@ function SkillsSection({ setup }: { setup: SetupStatus }) {
 
 function DocsSection({ setup }: { setup: SetupStatus }) {
   const allReady = setup.repos.length > 0 && setup.repos.every((r) => r.docs.every((d) => d.present))
+  const pending = setup.repos.filter((r) => r.docs.some((d) => !d.present)).length
+  const detail = allReady ? 'agent docs seeded in every repo' : `pending in ${pending} repo${pending === 1 ? '' : 's'}`
+
   return (
-    <Section title="Docs" ok={allReady}>
+    <Row label="Docs" ok={allReady} detail={detail}>
       <div className="flex flex-col gap-2">
         {setup.repos.map((repo) => (
           <RepoDocs key={repo.name} repo={repo} />
         ))}
+        {setup.repos.length === 0 && <span className="text-sm text-muted-foreground">Confirm a repo first.</span>}
       </div>
-    </Section>
+    </Row>
   )
 }
 

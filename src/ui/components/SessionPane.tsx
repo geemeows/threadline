@@ -1,23 +1,24 @@
-// Right pane of the locked IA (#8), rebuilt on shadcn (Base UI) in the Soft
-// Depth direction (#66): sessions on Tabs, the transcript on MessageScroller
-// (autoscroll replaces the hand-rolled stick-to-bottom), agent replies as flat
-// marker-led text with user turns as end-aligned Bubbles, a collapsible
-// tool-call particle (input/output, error tone), an inline approval-card
-// particle, and the composer on InputGroup + Kbd hints. Behavior is unchanged
-// from the #8 pane — approvals still resolve inline, the global inbox links here.
+// Right pane of the locked IA (#8), rebuilt to the Threadline Workspace mint
+// design (#81) on the #78 particle vocabulary. Sessions ride a scrollable tab
+// strip (status dot + label, mint underline on the active one) with a trailing
+// `+` that opens the new-session dialog; a header carries the session title, its
+// mono cwd, a live mint running pill, and — folded in from the real app, which
+// the mockup omits — pause/kill controls. The transcript renders the design's
+// message vocabulary: centered mono system lines, a hollow mint-diamond-avatar'd
+// agent turn, an end-aligned user bubble, a flat mono tool row that stays
+// EXPANDABLE into input/output (the #80 hybrid), and a full-width amber approval
+// card. The composer sits in a surface card under clickable command chips that
+// prefill it, with a `headless · <adapter>` runner line and a mint Send button.
+// Behavior is unchanged from the #8/#66 pane — approvals resolve inline, the
+// global inbox links here, drafts survive a dropped socket.
 
 import { ChevronRight, Pause, Terminal, TriangleAlert, X } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from '@/components/ui/input-group'
 import { Kbd } from '@/components/ui/kbd'
-import { Marker, MarkerContent } from '@/components/ui/marker'
-import { Message } from '@/components/ui/message'
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -28,13 +29,12 @@ import {
 } from '@/components/ui/message-scroller'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { adhocSessions, effortSessions, sessionLabel, statusOf } from '../lib/derive.js'
 import { store, useStore } from '../lib/store.js'
 import type { SessionView } from '../lib/store.js'
 import { reduceTranscript, summarizeInput, summarizeOutput } from '../lib/transcript.js'
 import type { ChatItem, ToolItem } from '../lib/transcript.js'
-import { CostBadge, StatusBadge, StatusDot } from './particles.js'
+import { MintPill, StatusBadge, StatusDot } from './particles.js'
 
 export function SessionPane() {
   const state = useStore()
@@ -45,20 +45,35 @@ export function SessionPane() {
   return (
     <div className="flex min-h-0 min-w-0 flex-col">
       {rows.length > 0 && (
-        <Tabs
-          value={selected?.meta.id}
-          onValueChange={(id) => store.selectSession(String(id))}
-          className="min-w-0 shrink-0 border-b px-2 pt-2"
-        >
-          <TabsList variant="line" className="max-w-full flex-nowrap overflow-x-auto">
-            {rows.map(({ view, status }) => (
-              <TabsTrigger key={view.meta.id} value={view.meta.id} className="gap-2">
+        <div className="flex shrink-0 items-center overflow-x-auto border-b">
+          {rows.map(({ view, status }) => {
+            const active = view.meta.id === selected?.meta.id
+            return (
+              <button
+                key={view.meta.id}
+                type="button"
+                onClick={() => store.selectSession(view.meta.id)}
+                className={cn(
+                  'flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs transition-colors',
+                  active
+                    ? 'border-primary font-semibold text-foreground'
+                    : 'border-transparent font-medium text-[var(--fg3)] hover:text-foreground',
+                )}
+              >
                 <StatusDot status={status} />
-                <span className="truncate">{sessionLabel(view)}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+                <span className="max-w-[16rem] truncate">{sessionLabel(view)}</span>
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            title="New session"
+            onClick={() => store.setNewSessionOpen(true)}
+            className="px-3.5 py-2.5 text-[15px] text-[var(--fg3)] transition-colors hover:text-foreground"
+          >
+            +
+          </button>
+        </div>
       )}
       {selected ? (
         <Chat key={selected.meta.id} view={selected} />
@@ -77,23 +92,37 @@ export function SessionPane() {
   )
 }
 
+/** Hollow mint diamond — the design's agent-turn avatar. A tinted, mint-lined
+ *  45° square, distinct from the filled brand DiamondLogo. */
+function AgentAvatar() {
+  return (
+    <span
+      aria-hidden
+      className="mt-0.5 size-[18px] shrink-0 rotate-45 rounded-[3px] border border-[color:var(--mint-line)] bg-accent"
+    />
+  )
+}
+
 function Chat({ view }: { view: SessionView }) {
   const state = useStore()
   const { meta } = view
   const status = statusOf(view)
   const items = reduceTranscript(meta, view.events)
   const disconnected = state.conn !== 'open'
+  const repo = meta.cwd.split('/').filter(Boolean).pop()
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2.5">
-        <StatusBadge status={status} />
-        <span className="font-mono text-xs text-muted-foreground" title={meta.cwd}>
-          {meta.cwd.split('/').filter(Boolean).pop()}
-        </span>
-        {meta.stage && <span className="text-xs text-muted-foreground">· {meta.stage}</span>}
-        <span className="flex-1" />
-        <CostBadge usage={meta.usage} />
+      <div className="flex shrink-0 items-center gap-2.5 border-b px-4 py-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-semibold text-foreground">{sessionLabel(view)}</div>
+          {repo && <div className="mt-px font-mono text-[11px] text-[var(--fg3)]">cwd geemeows/{repo}</div>}
+        </div>
+        {status === 'running' ? (
+          <MintPill indicator="spin">running</MintPill>
+        ) : (
+          <StatusBadge status={status} />
+        )}
         {meta.status === 'running' && (
           <>
             <Button
@@ -122,7 +151,7 @@ function Chat({ view }: { view: SessionView }) {
       <MessageScrollerProvider autoScroll defaultScrollPosition="end">
         <MessageScroller className="flex-1">
           <MessageScrollerViewport>
-            <MessageScrollerContent className="gap-4 p-4">
+            <MessageScrollerContent className="gap-[13px] px-4 py-[18px]">
               {items.map((item, i) => (
                 <MessageScrollerItem key={i} scrollAnchor={i === items.length - 1} className="animate-enter-soft">
                   <ChatMessage item={item} sessionId={meta.id} disconnected={disconnected} />
@@ -151,54 +180,45 @@ function ChatMessage({
   switch (item.kind) {
     case 'user':
       return (
-        <Message align="end">
-          <Bubble variant="tinted" align="end">
-            <BubbleContent className="whitespace-pre-wrap">{item.text}</BubbleContent>
-          </Bubble>
-        </Message>
+        <div className="ml-auto max-w-[82%] rounded-[13px_13px_4px_13px] border border-[var(--border2)] bg-[var(--surface2)] px-[13px] py-[9px] text-[13px] whitespace-pre-wrap text-foreground">
+          {item.text}
+        </div>
       )
     case 'agent':
       return (
-        <Marker className="items-start text-foreground">
-          <MarkerContent className="flex gap-2.5 whitespace-pre-wrap">
-            <span aria-hidden className="shrink-0 pt-px text-primary">
-              ✦
-            </span>
-            <span className="min-w-0">
-              {item.text}
-              {item.streaming && <Spinner className="ml-1.5 inline size-3 align-middle text-muted-foreground" />}
-            </span>
-          </MarkerContent>
-        </Marker>
+        <div className="flex max-w-[86%] gap-2.5">
+          <AgentAvatar />
+          <div className="min-w-0 text-[13px] whitespace-pre-wrap text-foreground">
+            {item.text}
+            {item.streaming && <Spinner className="ml-1.5 inline size-3 align-middle text-muted-foreground" />}
+          </div>
+        </div>
       )
     case 'tool':
       return <ToolCall item={item} />
     case 'system':
-      return (
-        <Marker variant="separator" className="text-xs">
-          <MarkerContent>{item.text}</MarkerContent>
-        </Marker>
-      )
+      return <div className="self-center font-mono text-[11px] text-[var(--fg3)]">{item.text}</div>
     case 'approval':
       return <ApprovalCard item={item} sessionId={sessionId} disconnected={disconnected} />
   }
 }
 
-/** Collapsible tool-call particle: a one-line summary that expands to the full
- *  input and (once it lands) output. Error results tint the row red. */
+/** Tool-call particle: the design's flat mono one-liner (tool name · summary) is
+ *  the COLLAPSED state; it stays clickable to reveal the full input and (once it
+ *  lands) output — the #80 hybrid that folds the real behavior into the mockup's
+ *  look. Error results tint the row red. */
 function ToolCall({ item }: { item: ToolItem }) {
   const summary = summarizeInput(item.input)
   return (
-    <Collapsible className="ml-6">
+    <Collapsible className="ml-7 max-w-[90%]">
       <CollapsibleTrigger
         className={cn(
-          'group/tool flex w-full min-w-0 items-center gap-2 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-muted',
+          'group/tool flex w-full min-w-0 items-center gap-2 rounded-lg border bg-[var(--surface)] px-[11px] py-1.5 text-left font-mono text-[11.5px] text-[var(--fg2)] transition-colors hover:bg-muted',
           item.error && 'border-destructive/30 text-destructive hover:bg-destructive/10',
         )}
       >
-        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[panel-open]/tool:rotate-90" />
-        <Terminal className="size-3.5 shrink-0" />
-        <span className="shrink-0 font-medium text-foreground">{item.name}</span>
+        <ChevronRight className="size-3.5 shrink-0 text-[var(--fg3)] transition-transform group-data-[panel-open]/tool:rotate-90" />
+        <span className="shrink-0 text-[var(--fg3)]">{item.name}</span>
         <span className="min-w-0 flex-1 truncate">{summary}</span>
         {item.error && <TriangleAlert className="size-3.5 shrink-0" />}
       </CollapsibleTrigger>
@@ -237,8 +257,9 @@ function formatValue(value: unknown): string {
   }
 }
 
-/** Inline approval-card particle (#8's canonical surface): the requested tool,
- *  a code block of the input, and Allow/Deny — resolved once answered. */
+/** Inline approval-card particle (#8's canonical surface), restyled to the
+ *  design's full-width amber card: pulsing amber dot + "Approval required", the
+ *  request text, a mono block of the input, and Approve & run / Deny. */
 function ApprovalCard({
   item,
   sessionId,
@@ -248,55 +269,69 @@ function ApprovalCard({
   sessionId: string
   disconnected: boolean
 }) {
-  const tinted = !item.resolved
+  const resolved = !!item.resolved
   return (
-    <Card
-      size="sm"
-      className={cn(tinted && 'border-warning/40 bg-warning/8')}
+    <div
+      className={cn(
+        'self-stretch rounded-xl border p-[13px_15px]',
+        resolved
+          ? 'border-border bg-card/50'
+          : 'border-[color:color-mix(in_srgb,var(--warning)_42%,transparent)] bg-[color:color-mix(in_srgb,var(--warning)_7%,var(--surface))]',
+      )}
     >
-      <CardContent className="flex flex-col gap-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusDot status={item.resolved ? 'done' : 'needs-approval'} />
-          <b className="text-sm">Permission request — {item.tool}</b>
-          {item.resolved && (
-            <StatusBadge status={item.resolved === 'allow' ? 'running' : 'done'}>
-              {item.resolved === 'allow' ? 'allowed' : 'denied'}
-            </StatusBadge>
-          )}
-        </div>
-        <pre className="max-h-44 overflow-auto rounded-md border bg-background px-2.5 py-2 font-mono text-xs whitespace-pre-wrap text-foreground">
-          {summarizeInput(item.input) ? formatValue(item.input) : summarizeOutput(item.input)}
-        </pre>
-        {!item.resolved && (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              disabled={disconnected}
-              onClick={() => store.respondPermission(sessionId, item.id, { behavior: 'allow' })}
-            >
-              Allow
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={disconnected}
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() =>
-                store.respondPermission(sessionId, item.id, { behavior: 'deny', message: 'denied from threadmap UI' })
-              }
-            >
-              Deny
-            </Button>
-            {disconnected && <span className="text-xs text-muted-foreground">Disconnected — reconnecting…</span>}
-          </div>
+      <div className="flex items-center gap-2 text-[12.5px] font-semibold text-warning">
+        <span
+          aria-hidden
+          className={cn('size-[7px] shrink-0 rounded-full bg-warning', !resolved && 'tl-pulse')}
+        />
+        Approval required — {item.tool}
+        {resolved && (
+          <StatusBadge status={item.resolved === 'allow' ? 'running' : 'done'} className="ml-1">
+            {item.resolved === 'allow' ? 'approved' : 'denied'}
+          </StatusBadge>
         )}
-      </CardContent>
-    </Card>
+      </div>
+      <pre className="my-2.5 max-h-44 overflow-auto rounded-lg border bg-background px-[11px] py-[9px] font-mono text-xs whitespace-pre-wrap text-foreground">
+        {summarizeInput(item.input) ? formatValue(item.input) : summarizeOutput(item.input)}
+      </pre>
+      {!resolved && (
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            disabled={disconnected}
+            onClick={() => store.respondPermission(sessionId, item.id, { behavior: 'allow' })}
+          >
+            Approve &amp; run
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disconnected}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() =>
+              store.respondPermission(sessionId, item.id, { behavior: 'deny', message: 'denied from threadmap UI' })
+            }
+          >
+            Deny
+          </Button>
+          {disconnected && <span className="text-xs text-muted-foreground">Disconnected — reconnecting…</span>}
+        </div>
+      )}
+    </div>
   )
 }
 
+/** Command chips over the composer — clickable quick-inserts that prefill the
+ *  textarea (the mockup's `/spec` `/override` `@ticket` affordances, made real). */
+const COMPOSER_CHIPS: { insert: string; cmd: string; label?: string }[] = [
+  { insert: '/spec ', cmd: '/spec', label: 'draft spec' },
+  { insert: '/override ', cmd: '/override', label: 'gate' },
+  { insert: '@', cmd: '@ticket' },
+]
+
 function Composer({ view, disconnected }: { view: SessionView; disconnected: boolean }) {
   const [text, setText] = useState('')
+  const ref = useRef<HTMLTextAreaElement>(null)
   const { meta } = view
   const ended = meta.status === 'ended'
   const resumable = ended && !!meta.resumeToken
@@ -320,10 +355,31 @@ function Composer({ view, disconnected }: { view: SessionView; disconnected: boo
     setText('')
   }
 
+  const insertChip = (insert: string) => {
+    setText((t) => (t.startsWith(insert.trimEnd()) ? t : insert + t))
+    ref.current?.focus()
+  }
+
   return (
-    <div className="shrink-0 px-4 pt-2 pb-3.5">
-      <InputGroup className="h-auto flex-col rounded-xl">
-        <InputGroupTextarea
+    <div className="shrink-0 px-4 pt-2.5 pb-3.5">
+      {!disabled && (
+        <div className="mb-2.5 flex flex-wrap gap-[7px]">
+          {COMPOSER_CHIPS.map((chip) => (
+            <button
+              key={chip.cmd}
+              type="button"
+              onClick={() => insertChip(chip.insert)}
+              className="inline-flex items-center gap-1.5 rounded-lg border bg-[var(--surface)] px-2 py-[3px] text-[11px] text-[var(--fg3)] transition-colors hover:text-foreground"
+            >
+              <span className="font-mono text-[var(--fg2)]">{chip.cmd}</span>
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="rounded-2xl border bg-[var(--surface)] px-3 pt-[11px] pb-2.5">
+        <textarea
+          ref={ref}
           rows={2}
           value={text}
           disabled={disabled}
@@ -332,7 +388,7 @@ function Composer({ view, disconnected }: { view: SessionView; disconnected: boo
               ? resumable
                 ? 'Session ended — sending resumes it…'
                 : 'Session ended and is not resumable.'
-              : 'Message the agent…'
+              : `Message the ${meta.stage ?? 'agent'} session…`
           }
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -341,20 +397,12 @@ function Composer({ view, disconnected }: { view: SessionView; disconnected: boo
               submit()
             }
           }}
+          className="w-full resize-none border-none bg-transparent px-1 py-0.5 text-[13.5px] text-foreground outline-none placeholder:text-[var(--fg3)] disabled:opacity-60"
         />
-        <InputGroupAddon align="block-end" className="gap-2">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Kbd>⏎</Kbd> send
-          </span>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Kbd>⇧⏎</Kbd> new line
-          </span>
-          <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
-            <Kbd>/</Kbd> grilling
-          </span>
-          <InputGroupButton
+        <div className="mt-1.5 flex items-center gap-2.5">
+          <span className="text-[11px] text-[var(--fg3)]">headless · {meta.adapter}</span>
+          <Button
             size="sm"
-            variant="default"
             className="ml-auto"
             disabled={disabled || disconnected}
             title={disconnected ? 'Disconnected — reconnecting' : undefined}
@@ -362,9 +410,9 @@ function Composer({ view, disconnected }: { view: SessionView; disconnected: boo
           >
             {ended && resumable ? 'Resume' : 'Send'}
             <Kbd className="bg-primary-foreground/15 text-primary-foreground">⏎</Kbd>
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

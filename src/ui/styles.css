@@ -2,54 +2,89 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
 
 /* The app stamps `data-theme` on <html> (App.tsx), dark by default — so dark
    values live in :root and the `dark:` variant keys off not-light. */
 @custom-variant dark (&:where(:root:not([data-theme='light']), :root:not([data-theme='light']) *));
 
-/* Soft Depth (#58): cool layered dark grays, indigo accent, 10px radii, both
-   modes. Dark is the default (:root); light overrides under [data-theme='light'].
-   The old #8 Kodeo token/class layer was retired when the redesign landed (#69). */
+/* ============================================================================
+   Mint Workspace token contract (#76 / #77) — the single visual system.
+   Dark is the default (:root); light overrides under [data-theme='light'].
+   Retires the Soft Depth indigo system (#58); the #8 Kodeo layer went in #69.
+
+   Each block first declares the DESIGN's raw palette (from the Threadline
+   Workspace .dc.html) verbatim, then maps those vars onto the shadcn semantic
+   tokens the components consume. Raw vars stay exposed (--mint-tint, --border2,
+   --fg3, --blue/--purple/--amber/--red) so surfaces can reach the design's
+   full vocabulary; the shadcn tokens are what primitives read by default.
+
+   Mapping (both modes):
+     bg → background · panel → card/sidebar · surface → popover · surface2 → muted/secondary
+     mint → primary/ring/success · mint-ink → primary-foreground · mint-tint → accent
+     fg → foreground · fg2 → muted-foreground · fg3 → --fg3 (tertiary, raw)
+     border → border · border2 → input · red → destructive · amber → warning · blue → info
+   ============================================================================ */
 
 :root {
-  --radius: 0.625rem;
+  /* Dominant card/panel radius in the design is ~9px (pills use 99px). */
+  --radius: 0.5625rem;
 
-  /* Soft Depth — dark (default) */
-  --background: #0e0f14;
-  --foreground: #e6e7ec;
-  --card: #1b1d26;
-  --card-foreground: #e6e7ec;
-  --popover: #22242f;
-  --popover-foreground: #e6e7ec;
-  --primary: #8b8bf5;
-  --primary-foreground: #ffffff;
-  --secondary: #22242f;
-  --secondary-foreground: #e6e7ec;
-  --muted: #22242f;
-  --muted-foreground: #9d9fac;
-  --accent: rgba(139, 139, 245, 0.11);
-  --accent-foreground: #e6e7ec;
-  --destructive: #f87171;
-  --border: #272935;
-  --input: #363948;
-  --ring: #8b8bf5;
-  --success: #4ade80;
-  --warning: #fbbf24;
-  --info: #60a5fa;
-  --chart-1: #8b8bf5;
-  --chart-2: #4ade80;
-  --chart-3: #fbbf24;
-  --chart-4: #60a5fa;
-  --chart-5: #f87171;
-  --sidebar: #15161d;
-  --sidebar-foreground: #e6e7ec;
-  --sidebar-primary: #8b8bf5;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #22242f;
-  --sidebar-accent-foreground: #e6e7ec;
-  --sidebar-border: #272935;
-  --sidebar-ring: #8b8bf5;
-  --shadow-depth: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 16px rgba(0, 0, 0, 0.18);
+  /* --- design palette (dark) --- */
+  --bg: #0b0c0e;
+  --panel: #131417;
+  --surface: #17191d;
+  --surface2: #1e2126;
+  --border-1: #24272d;
+  --border2: #32363e;
+  --fg-1: #e9ebee;
+  --fg2: #a3a7af;
+  --fg3: #71757d;
+  --mint: #4ade9c;
+  --mint-ink: #082b1b;
+  --mint-tint: rgba(74, 222, 156, 0.1);
+  --mint-line: rgba(74, 222, 156, 0.3);
+  --blue: #7ab3ff;
+  --purple: #b19bf5;
+  --amber: #e8b04b;
+  --red: #f27d75;
+
+  /* --- shadcn semantic tokens ← design (dark) --- */
+  --background: var(--bg);
+  --foreground: var(--fg-1);
+  --card: var(--panel);
+  --card-foreground: var(--fg-1);
+  --popover: var(--surface);
+  --popover-foreground: var(--fg-1);
+  --primary: var(--mint);
+  --primary-foreground: var(--mint-ink);
+  --secondary: var(--surface2);
+  --secondary-foreground: var(--fg-1);
+  --muted: var(--surface2);
+  --muted-foreground: var(--fg2);
+  --accent: var(--mint-tint);
+  --accent-foreground: var(--fg-1);
+  --destructive: var(--red);
+  --border: var(--border-1);
+  --input: var(--border2);
+  --ring: var(--mint);
+  --success: var(--mint);
+  --warning: var(--amber);
+  --info: var(--blue);
+  --chart-1: var(--mint);
+  --chart-2: var(--blue);
+  --chart-3: var(--amber);
+  --chart-4: var(--purple);
+  --chart-5: var(--red);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--fg-1);
+  --sidebar-primary: var(--mint);
+  --sidebar-primary-foreground: var(--mint-ink);
+  --sidebar-accent: var(--mint-tint);
+  --sidebar-accent-foreground: var(--fg-1);
+  --sidebar-border: var(--border-1);
+  --sidebar-ring: var(--mint);
+  --shadow-depth: 0 1px 0 rgba(255, 255, 255, 0.02), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
 
   /* Motion vocabulary (subtle & calm, #68): one easing + one duration scale. */
   --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
@@ -57,42 +92,76 @@
   --duration-base: 180ms;
 }
 [data-theme='light'] {
-  /* Soft Depth — light */
-  --background: #f2f2f6;
-  --foreground: #1e1f26;
-  --card: #ffffff;
-  --card-foreground: #1e1f26;
-  --popover: #ffffff;
-  --popover-foreground: #1e1f26;
-  --primary: #5b5bd6;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f8;
-  --secondary-foreground: #1e1f26;
-  --muted: #f4f4f8;
-  --muted-foreground: #5c5e6b;
-  --accent: rgba(91, 91, 214, 0.09);
-  --accent-foreground: #1e1f26;
-  --destructive: #dc2626;
-  --border: #e2e2ea;
-  --input: #cdcdd9;
-  --ring: #5b5bd6;
-  --success: #16a34a;
-  --warning: #b45309;
-  --info: #2563eb;
-  --chart-1: #5b5bd6;
-  --chart-2: #16a34a;
-  --chart-3: #b45309;
-  --chart-4: #2563eb;
-  --chart-5: #dc2626;
-  --sidebar: #fafafc;
-  --sidebar-foreground: #1e1f26;
-  --sidebar-primary: #5b5bd6;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f4f4f8;
-  --sidebar-accent-foreground: #1e1f26;
-  --sidebar-border: #e2e2ea;
-  --sidebar-ring: #5b5bd6;
-  --shadow-depth: 0 1px 2px rgba(16, 17, 26, 0.06), 0 4px 12px rgba(16, 17, 26, 0.05);
+  /* --- design palette (light) --- */
+  --bg: #eceef1;
+  --panel: #f8f9fa;
+  --surface: #ffffff;
+  --surface2: #eef1f4;
+  --border-1: #e0e3e8;
+  --border2: #cfd4db;
+  --fg-1: #171a1f;
+  --fg2: #565b64;
+  --fg3: #868c95;
+  --mint: #0e9f6e;
+  --mint-ink: #ffffff;
+  --mint-tint: rgba(14, 159, 110, 0.08);
+  --mint-line: rgba(14, 159, 110, 0.28);
+  --blue: #2f6fd0;
+  --purple: #7c5cd6;
+  --amber: #a06a10;
+  --red: #cf3f38;
+
+  /* --- shadcn semantic tokens ← design (light) --- */
+  --background: var(--bg);
+  --foreground: var(--fg-1);
+  --card: var(--panel);
+  --card-foreground: var(--fg-1);
+  --popover: var(--surface);
+  --popover-foreground: var(--fg-1);
+  --primary: var(--mint);
+  --primary-foreground: var(--mint-ink);
+  --secondary: var(--surface2);
+  --secondary-foreground: var(--fg-1);
+  --muted: var(--surface2);
+  --muted-foreground: var(--fg2);
+  --accent: var(--mint-tint);
+  --accent-foreground: var(--fg-1);
+  --destructive: var(--red);
+  --border: var(--border-1);
+  --input: var(--border2);
+  --ring: var(--mint);
+  --success: var(--mint);
+  --warning: var(--amber);
+  --info: var(--blue);
+  --chart-1: var(--mint);
+  --chart-2: var(--blue);
+  --chart-3: var(--amber);
+  --chart-4: var(--purple);
+  --chart-5: var(--red);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--fg-1);
+  --sidebar-primary: var(--mint);
+  --sidebar-primary-foreground: var(--mint-ink);
+  --sidebar-accent: var(--mint-tint);
+  --sidebar-accent-foreground: var(--fg-1);
+  --sidebar-border: var(--border-1);
+  --sidebar-ring: var(--mint);
+  --shadow-depth: 0 1px 2px rgba(16, 20, 28, 0.04), 0 10px 28px -16px rgba(16, 20, 28, 0.22);
+}
+
+/* Scrollbars match the design: thin, pill thumb inset from the track (#77). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 html,
@@ -178,6 +247,55 @@ button {
   animation: enter-soft var(--duration-base) var(--ease-soft);
 }
 
+/* ---------- tl-* status vocabulary (from the Threadline Workspace design, #78)
+   The design's shared indicator motion, extracted so every surface's status
+   dots/spinners/rings read identically. `tl-pulse` = a live/attention dot
+   (calmer than Tailwind's animate-pulse: floors at 0.4, not 0.5); `tl-spin` =
+   the running ring spinner; `tl-ring` = a one-shot mint focus ripple. Duration
+   is overridable per-call via inline `animation-duration` where the design
+   varies it (inbox 1.1s vs stage pill 1.6s). All three are neutralized by the
+   prefers-reduced-motion block above. */
+@keyframes tl-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes tl-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--mint-line);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes tl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.tl-pulse {
+  animation: tl-pulse 1.3s ease-in-out infinite;
+}
+.tl-ring {
+  animation: tl-ring 1.8s var(--ease-soft) infinite;
+}
+.tl-spin {
+  animation: tl-spin 0.9s linear infinite;
+}
+
+/* Toasts (#84): the mint floating-card feel — the shell's depth shadow on
+   sonner's toast surface (bg/border/radius come from the CSS vars in sonner.tsx). */
+.cn-toast {
+  box-shadow: var(--shadow-depth);
+}
+
 /* Reduced motion: neutralize every animation/transition across the redesign
    (animate-pulse/spin/in/out, collapsibles, fades). */
 @media (prefers-reduced-motion: reduce) {
@@ -195,10 +313,11 @@ button {
   --ease-soft: var(--ease-soft);
   --font-heading: var(--font-sans);
   --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  --color-purple: var(--purple);
   --shadow-depth: var(--shadow-depth);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

@@ -82,6 +82,42 @@ describe('setup routes', () => {
     expect(ok.status).toBe(200)
   })
 
+  it('mis-picked Linear without credentials fails open — tracker switch recovers (#82)', async () => {
+    const workspace = await makeWorkspace()
+    await writeConfig(workspace.root, { tracker: 'linear' })
+    // Default effortsExist (no injection): the Linear probe rejects because no
+    // key resolves — the lock must fail open instead of wedging the step.
+    const app = makeApp(workspace, {
+      effortsExist: undefined,
+      linearClient: async () => {
+        throw new Error('no Linear key configured')
+      },
+      statusDeps: { checkLinearAuth: async () => ({ ok: false, detail: 'no key' }) },
+    })
+    const status = (await (await app.request('/status')).json()) as { trackerLocked: boolean }
+    expect(status.trackerLocked).toBe(false)
+    const res = await app.request('/config', json({ tracker: 'github' }))
+    expect(res.status).toBe(200)
+    expect((await readConfig(workspace.root))?.tracker).toBe('github')
+  })
+
+  it('a hanging Linear probe cannot wedge the tracker switch (#82)', async () => {
+    const workspace = await makeWorkspace()
+    await writeConfig(workspace.root, { tracker: 'linear' })
+    const app = makeApp(workspace, {
+      effortsExist: undefined,
+      effortsProbeTimeoutMs: 50,
+      linearClient: async () =>
+        new LinearClient({
+          apiKey: 'k',
+          fetchImpl: (() => new Promise(() => {})) as unknown as typeof fetch,
+        }),
+    })
+    const res = await app.request('/config', json({ tracker: 'github' }))
+    expect(res.status).toBe(200)
+    expect((await readConfig(workspace.root))?.tracker).toBe('github')
+  })
+
   it('POST /linear/key validates, stores, and records the org id', async () => {
     const workspace = await makeWorkspace()
     await writeConfig(workspace.root, { tracker: 'linear' })

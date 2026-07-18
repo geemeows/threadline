@@ -37,9 +37,24 @@ export interface SetupRouteDeps {
   linearClient?: (orgId?: string) => Promise<LinearClient>
   /** Injectable for tests; used both by status and the tracker lock. */
   effortsExist?: () => Promise<boolean>
+  /** Bound on the default effortsExist tracker probe (#82); injectable for tests. */
+  effortsProbeTimeoutMs?: number
   statusDeps?: StatusDeps
   /** Injectable credentials file path for tests. */
   credentialsPath?: string
+}
+
+/** Resolve `fallback` if `promise` hasn't settled within `ms`. */
+async function raceTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export function createSetupApp(deps: SetupRouteDeps): Hono {
@@ -57,11 +72,18 @@ export function createSetupApp(deps: SetupRouteDeps): Hono {
       // Efforts are wayfinder:map issues; even Linear workspaces keep code on
       // GitHub, but the map lives in the tracker — for Linear, query it there.
       if (config?.tracker === 'linear') {
-        const client = await clientFor(config.linear?.orgId)
-        const data = await client.query<{ issues: { nodes: { id: string }[] } }>(
-          `query { issues(filter: { labels: { name: { eq: "wayfinder:map" } } }, first: 1) { nodes { id } } }`,
-        )
-        return data.issues.nodes.length > 0
+        // Fail OPEN (#82): a mis-picked tracker with no working credentials
+        // must never lock the tracker choice. Errors (no key, bad key) resolve
+        // to false, and a slow round-trip is bounded so /status and the
+        // PUT /config lock guard can't hang on it.
+        const probe = (async () => {
+          const client = await clientFor(config.linear?.orgId)
+          const data = await client.query<{ issues: { nodes: { id: string }[] } }>(
+            `query { issues(filter: { labels: { name: { eq: "wayfinder:map" } } }, first: 1) { nodes { id } } }`,
+          )
+          return data.issues.nodes.length > 0
+        })().catch(() => false)
+        return await raceTimeout(probe, deps.effortsProbeTimeoutMs ?? 4_000, false)
       }
       const efforts = await listEfforts(repos, (args, cwd) => exec('gh', args, cwd), {
         includeClosed: true,

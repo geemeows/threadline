@@ -52,8 +52,10 @@ export interface State {
   /** ⌘K command palette (search over efforts + sessions). */
   paletteOpen: boolean
   setup: SetupStatus | null
-  /** Panel visibility; forced open (guided mode) while the workspace isn't ready. */
+  /** Readiness panel visibility (always dismissable — first-run lives in the wizard). */
   setupOpen: boolean
+  /** Full-screen onboarding wizard takeover (#82); forced on while not ready. */
+  onboarding: boolean
   notices: PipelineNotice[]
   error: string | null
 }
@@ -76,12 +78,16 @@ export class Store {
     paletteOpen: false,
     setup: null,
     setupOpen: false,
+    onboarding: false,
     notices: [],
     error: null,
   }
   private listeners = new Set<Listener>()
   private ws: WebSocket | null = null
   private attached = new Set<string>()
+  /** Set once the user explicitly leaves the wizard (enter workspace, agent
+   *  escalation) so later refreshes don't force the takeover back open. */
+  private onboardingDismissed = false
 
   getState = (): State => this.state
 
@@ -121,24 +127,39 @@ export class Store {
     await this.refreshSetup()
   }
 
-  /** Pull the readiness snapshot; guided mode opens the panel until ready (#7 §10). */
+  /** Pull the readiness snapshot; an unready workspace enters the wizard (#7 §10, #82). */
   async refreshSetup() {
     const setup = await fetchJson<SetupStatus>('/api/setup/status')
     if (!setup) return
-    this.set({ setup, setupOpen: this.state.setupOpen || !setup.ready })
+    this.set({
+      setup,
+      onboarding: this.state.onboarding || (!setup.ready && !this.onboardingDismissed),
+    })
   }
 
-  async saveSetupConfig(patch: Partial<WorkspaceConfig>): Promise<string | null> {
+  /**
+   * Persist a config patch. Hot wizard interactions (repo toggles, tracker
+   * pick) pass `refresh: false` and keep their own optimistic state — the full
+   * status recompute (gh auth + fs stats) runs on step navigation instead (#82).
+   */
+  async saveSetupConfig(
+    patch: Partial<WorkspaceConfig>,
+    opts: { refresh?: boolean } = {},
+  ): Promise<string | null> {
     const res = await mutateJson('/api/setup/config', 'PUT', patch)
     if (res.error) return res.error
-    await this.refreshSetup()
+    if (opts.refresh ?? true) await this.refreshSetup()
     return null
   }
 
   setSetupOpen(open: boolean) {
-    // The main UI unlocks at ≥1 ready repo — until then the panel stays up.
-    if (!open && this.state.setup && !this.state.setup.ready) return
     this.set({ setupOpen: open })
+  }
+
+  /** Enter/leave the full-screen onboarding wizard; leaving sticks until re-entered. */
+  setOnboarding(active: boolean) {
+    this.onboardingDismissed = !active
+    this.set({ onboarding: active, ...(active ? { setupOpen: false } : {}) })
   }
 
   private connect() {

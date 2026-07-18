@@ -1,33 +1,25 @@
 // Start a session: pick the repo (cwd), optional stage tag, and the prompt.
-// Rebuilt on shadcn (Base UI) in the Soft Depth direction (#67): a Dialog with
-// a FieldGroup of a repo Select, a stage Select (both on the Base `items` API),
-// and a prompt Textarea. Stage-composed prompts arrive with implement-session
-// orchestration (#30) — until then the prompt is free-form with the pipeline's
-// slash skills at hand. Behavior is unchanged from the #8 dialog.
+// Rebuilt to the mint Threadline Workspace design (#83) on the shared
+// OverlayShell particle (#78 vocabulary): a top-anchored panel modal with a
+// mono effort-ref beside the title, a stacked field group, and a mint
+// Start-session action. Still a Base UI Dialog underneath, so focus-trap, Esc,
+// and the Select/Textarea a11y come free. Behavior is unchanged from the #67
+// dialog — the reskin only restyles the chrome and the fields.
 
 import { Play } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { store, useStore } from '../lib/store.js'
-import { RAIL_STAGES } from '../lib/types.js'
+import { PIPELINE_STAGES } from '../lib/types.js'
+import { OverlayShell } from './particles.js'
 
 const STAGE_ITEMS = [
   { value: '', label: '— none —' },
-  ...RAIL_STAGES.filter((s) => s.key !== 'setup').map((s) => ({ value: s.key, label: s.label })),
+  ...PIPELINE_STAGES.map((s) => ({ value: s.key, label: s.label })),
 ]
 
 export function NewSessionDialog() {
@@ -62,70 +54,72 @@ export function NewSessionDialog() {
   }
 
   return (
-    <Dialog open={state.newSessionOpen} onOpenChange={store.setNewSessionOpen}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            New session
-            {effort && (
-              <Badge variant="outline" className="font-mono text-muted-foreground">
-                {effort.ref.display}
-              </Badge>
-            )}
-          </DialogTitle>
-          <DialogDescription>
-            Runs a Claude Code session in the chosen repo — it docks in the chat pane on the right.
-          </DialogDescription>
-        </DialogHeader>
+    <OverlayShell
+      open={state.newSessionOpen}
+      onOpenChange={store.setNewSessionOpen}
+      title="New session"
+      description="Runs a Claude Code session in the chosen repo — it docks in the chat pane on the right."
+      width={520}
+      afterTitle={
+        effort && (
+          <span className="rounded-full border border-[var(--border2)] px-[9px] py-0.5 font-mono text-[11px] text-muted-foreground">
+            {effort.ref.display}
+          </span>
+        )
+      }
+    >
+      <FieldGroup className="gap-3.5 px-[18px] py-4">
+        <Field>
+          <FieldLabel className="text-xs font-semibold text-muted-foreground">Repo · session cwd</FieldLabel>
+          <Select items={repoItems} value={cwd} onValueChange={(v) => setRepoPath(String(v ?? ''))}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Pick a repo…" />
+            </SelectTrigger>
+            <SelectContent>
+              {repoItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
 
-        <FieldGroup>
-          <Field>
-            <FieldLabel>Repo (session cwd)</FieldLabel>
-            <Select items={repoItems} value={cwd} onValueChange={(v) => setRepoPath(String(v ?? ''))}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pick a repo…" />
-              </SelectTrigger>
-              <SelectContent>
-                {repoItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+        <Field>
+          <FieldLabel className="text-xs font-semibold text-muted-foreground">Stage</FieldLabel>
+          <Select items={STAGE_ITEMS} value={stage} onValueChange={(v) => setStage(String(v ?? ''))}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="— none —" />
+            </SelectTrigger>
+            <SelectContent>
+              {STAGE_ITEMS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
 
-          <Field>
-            <FieldLabel>Stage (optional)</FieldLabel>
-            <Select items={STAGE_ITEMS} value={stage} onValueChange={(v) => setStage(String(v ?? ''))}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="— none —" />
-              </SelectTrigger>
-              <SelectContent>
-                {STAGE_ITEMS.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+        <Field>
+          <FieldLabel htmlFor="new-session-prompt" className="text-xs font-semibold text-muted-foreground">
+            Prompt
+          </FieldLabel>
+          <Textarea
+            id="new-session-prompt"
+            rows={4}
+            value={prompt}
+            placeholder="/implement next unblocked ticket on the map…"
+            onChange={(e) => setPrompt(e.target.value)}
+          />
+        </Field>
 
-          <Field>
-            <FieldLabel htmlFor="new-session-prompt">Prompt</FieldLabel>
-            <Textarea
-              id="new-session-prompt"
-              rows={4}
-              value={prompt}
-              placeholder="/grilling next decision on the map…"
-              onChange={(e) => setPrompt(e.target.value)}
-            />
-          </Field>
-        </FieldGroup>
-
-        <DialogFooter>
-          <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
+        <div className="flex justify-end gap-2.5">
+          <Button variant="outline" size="sm" onClick={() => store.setNewSessionOpen(false)}>
+            Cancel
+          </Button>
           <Button
+            size="sm"
             onClick={start}
             disabled={!cwd || !prompt.trim() || disconnected}
             title={disconnected ? 'Disconnected — reconnecting' : undefined}
@@ -133,8 +127,8 @@ export function NewSessionDialog() {
             <Play />
             Start session
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </FieldGroup>
+    </OverlayShell>
   )
 }
