@@ -1,14 +1,21 @@
 @import 'tailwindcss';
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
 
-/* Visual system locked in #8: near-black frame, charcoal panels, single mint
-   accent, pill status vocabulary, 12px card radii, Inter/system type. */
+/* The app stamps `data-theme` on <html> (App.tsx), dark by default — so dark
+   values live in :root and the `dark:` variant keys off not-light. */
+@custom-variant dark (&:where(:root:not([data-theme='light']), :root:not([data-theme='light']) *));
+
+/* Legacy tokens (--bg, --mint, …) drive the old #8 components during the
+   redesign migration. The shadcn semantic tokens below carry the Soft Depth
+   direction locked in #58: cool layered dark grays, indigo accent, 10px radii. */
 
 :root {
   --bg: #0b0c0e;
   --panel: #131417;
   --surface: #17191d;
   --surface2: #1e2126;
-  --border: #24272d;
   --border2: #32363e;
   --fg: #e9ebee;
   --fg2: #a3a7af;
@@ -20,17 +27,53 @@
   --purple: #b19bf5;
   --amber: #e8b04b;
   --red: #f27d75;
-  --radius: 12px;
-  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --radius: 0.625rem;
+  --sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  /* Soft Depth — dark (default) */
+  --background: #0e0f14;
+  --foreground: #e6e7ec;
+  --card: #1b1d26;
+  --card-foreground: #e6e7ec;
+  --popover: #22242f;
+  --popover-foreground: #e6e7ec;
+  --primary: #8b8bf5;
+  --primary-foreground: #ffffff;
+  --secondary: #22242f;
+  --secondary-foreground: #e6e7ec;
+  --muted: #22242f;
+  --muted-foreground: #9d9fac;
+  --accent: rgba(139, 139, 245, 0.11);
+  --accent-foreground: #e6e7ec;
+  --destructive: #f87171;
+  --border: #272935;
+  --input: #363948;
+  --ring: #8b8bf5;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+  --chart-1: #8b8bf5;
+  --chart-2: #4ade80;
+  --chart-3: #fbbf24;
+  --chart-4: #60a5fa;
+  --chart-5: #f87171;
+  --sidebar: #15161d;
+  --sidebar-foreground: #e6e7ec;
+  --sidebar-primary: #8b8bf5;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #22242f;
+  --sidebar-accent-foreground: #e6e7ec;
+  --sidebar-border: #272935;
+  --sidebar-ring: #8b8bf5;
+  --shadow-depth: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 [data-theme='light'] {
   --bg: #ebedf0;
   --panel: #f7f8f9;
   --surface: #ffffff;
   --surface2: #f0f2f4;
-  --border: #dcdfe4;
-  --border2: #c8ccd3;
+  --border2: #cdcdd9;
   --fg: #1b1e23;
   --fg2: #555a63;
   --fg3: #7d828b;
@@ -41,6 +84,43 @@
   --purple: #7c5cd6;
   --amber: #a06a10;
   --red: #cf3f38;
+
+  /* Soft Depth — light */
+  --background: #f2f2f6;
+  --foreground: #1e1f26;
+  --card: #ffffff;
+  --card-foreground: #1e1f26;
+  --popover: #ffffff;
+  --popover-foreground: #1e1f26;
+  --primary: #5b5bd6;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f8;
+  --secondary-foreground: #1e1f26;
+  --muted: #f4f4f8;
+  --muted-foreground: #5c5e6b;
+  --accent: rgba(91, 91, 214, 0.09);
+  --accent-foreground: #1e1f26;
+  --destructive: #dc2626;
+  --border: #e2e2ea;
+  --input: #cdcdd9;
+  --ring: #5b5bd6;
+  --success: #16a34a;
+  --warning: #b45309;
+  --info: #2563eb;
+  --chart-1: #5b5bd6;
+  --chart-2: #16a34a;
+  --chart-3: #b45309;
+  --chart-4: #2563eb;
+  --chart-5: #dc2626;
+  --sidebar: #fafafc;
+  --sidebar-foreground: #1e1f26;
+  --sidebar-primary: #5b5bd6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f4f8;
+  --sidebar-accent-foreground: #1e1f26;
+  --sidebar-border: #e2e2ea;
+  --sidebar-ring: #5b5bd6;
+  --shadow-depth: 0 1px 2px rgba(16, 17, 26, 0.06), 0 4px 12px rgba(16, 17, 26, 0.05);
 }
 
 html,
@@ -667,4 +747,71 @@ kbd {
 }
 .field select option {
   background: var(--surface);
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --shadow-depth: var(--shadow-depth);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  /* Base UI prerequisites: popup stacking context + iOS Safari backdrops. */
+  #root {
+    isolation: isolate;
+  }
+  body {
+    position: relative;
+  }
 }
