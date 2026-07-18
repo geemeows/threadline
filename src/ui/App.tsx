@@ -3,11 +3,13 @@
 // chat), Needs-you queue in the top bar, approvals inline + global inbox.
 // Rebuilt on shadcn (#64): Sidebar shell, resizable rail/chat split, ⌘K palette.
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { useDefaultLayout } from 'react-resizable-panels'
 import { Button } from '@/components/ui/button'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { Toaster } from '@/components/ui/sonner'
 import { CommandPalette } from './components/CommandPalette.js'
 import { EffortsTree } from './components/EffortsTree.js'
 import { Inbox } from './components/Inbox.js'
@@ -30,13 +32,24 @@ export function App() {
     document.documentElement.dataset.theme = state.theme
   }, [state.theme])
 
+  // Announce connection drops/recoveries as toasts — the topbar badge is easy
+  // to miss, and a closed socket silently drops sends until it reconnects.
+  const prevConn = useRef(state.conn)
+  useEffect(() => {
+    const was = prevConn.current
+    prevConn.current = state.conn
+    if (was === state.conn) return
+    if (state.conn === 'closed') toast.warning('Connection lost — reconnecting…', { id: 'ws-conn' })
+    else if (state.conn === 'open' && was === 'closed') toast.success('Reconnected', { id: 'ws-conn' })
+  }, [state.conn])
+
   return (
     <SidebarProvider className="h-svh overflow-hidden">
       <EffortsTree />
       <SidebarInset className="h-svh min-w-0">
         <TopBar />
         {state.error && (
-          <div className="flex shrink-0 items-center gap-2 border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">
+          <div className="flex shrink-0 animate-enter-soft items-center gap-2 border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">
             {state.error}
             <Button variant="ghost" size="xs" className="ml-auto" onClick={() => store.dismissError()}>
               dismiss
@@ -57,6 +70,7 @@ export function App() {
       <Inbox />
       <NewSessionDialog />
       <SetupPanel />
+      <Toaster theme={state.theme} position="bottom-right" />
     </SidebarProvider>
   )
 }

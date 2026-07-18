@@ -37,6 +37,8 @@ export interface PipelineNotice {
 
 export interface State {
   conn: 'connecting' | 'open' | 'closed'
+  /** False until the first REST snapshot lands — panes show skeletons, not a false-empty. */
+  loaded: boolean
   theme: 'dark' | 'light'
   workspace: Workspace | null
   efforts: EffortSummary[]
@@ -61,6 +63,7 @@ type Listener = () => void
 export class Store {
   private state: State = {
     conn: 'connecting',
+    loaded: false,
     theme: (storedTheme() as 'dark' | 'light') ?? 'dark',
     workspace: null,
     efforts: [],
@@ -106,6 +109,7 @@ export class Store {
       views[meta.id] ??= { meta, events: [], transcriptLoaded: false }
     }
     this.set({
+      loaded: true,
       workspace: workspace ?? null,
       efforts: efforts ?? [],
       sessions: views,

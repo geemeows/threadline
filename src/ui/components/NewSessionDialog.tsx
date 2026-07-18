@@ -7,6 +7,7 @@
 
 import { Play } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -40,8 +41,14 @@ export function NewSessionDialog() {
   const cwd = repoPath || repos[0]?.path || ''
   const effort = state.efforts.find((e) => e.ref.id === state.selectedEffort)
 
+  const disconnected = state.conn !== 'open'
+
   const start = () => {
     if (!cwd || !prompt.trim()) return
+    if (disconnected) {
+      toast.error('Disconnected — reconnecting. Try again in a moment.')
+      return
+    }
     store.startSession({
       cwd,
       prompt: prompt.trim(),
@@ -51,6 +58,7 @@ export function NewSessionDialog() {
     })
     store.setNewSessionOpen(false)
     setPrompt('')
+    toast.success('Session starting…')
   }
 
   return (
@@ -117,7 +125,11 @@ export function NewSessionDialog() {
 
         <DialogFooter>
           <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
-          <Button onClick={start} disabled={!cwd || !prompt.trim()}>
+          <Button
+            onClick={start}
+            disabled={!cwd || !prompt.trim() || disconnected}
+            title={disconnected ? 'Disconnected — reconnecting' : undefined}
+          >
             <Play />
             Start session
           </Button>

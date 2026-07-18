@@ -11,6 +11,7 @@ import {
   ArrowDownToLine,
   Check,
   CircleCheck,
+  Compass,
   ExternalLink,
   Lock,
   Play,
@@ -20,13 +21,16 @@ import {
   Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { AlertDialog, AlertDialogContent, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Item, ItemActions, ItemContent, ItemTitle } from '@/components/ui/item'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -77,11 +81,28 @@ export function PipelineRail() {
   const { snapshot, refresh } = useStageSnapshot(effort?.ref.id ?? null)
 
   if (!effort) {
+    // Before the first snapshot lands, show a stepper skeleton — never a
+    // false "no effort" on a workspace that actually has efforts loading.
+    if (!state.loaded) {
+      return (
+        <div className="flex min-w-0 flex-col overflow-y-auto border-r">
+          <RailSkeleton />
+        </div>
+      )
+    }
     return (
-      <div className="flex min-w-0 flex-col items-center justify-center overflow-y-auto border-r">
-        <p className="max-w-xs p-6 text-center text-sm text-muted-foreground">
-          Select an effort — or start one by charting a wayfinder map in a workspace repo.
-        </p>
+      <div className="flex min-w-0 flex-col overflow-y-auto border-r">
+        <Empty className="flex-1">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Compass />
+            </EmptyMedia>
+            <EmptyTitle>No effort selected</EmptyTitle>
+            <EmptyDescription>
+              Pick an effort from the sidebar — or chart a wayfinder map in a workspace repo to start one.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </div>
     )
   }
@@ -147,6 +168,27 @@ export function PipelineRail() {
   )
 }
 
+/** Initial-load placeholder: a muted six-row stepper so the rail has shape
+ *  before the first /api/stage snapshot lands, instead of a false-empty. */
+function RailSkeleton() {
+  return (
+    <div className="flex flex-col gap-3 px-5 pt-4" aria-hidden>
+      <Skeleton className="h-5 w-2/3" />
+      <div className="flex flex-col">
+        {RAIL_STAGES.map((rail, i) => (
+          <div key={rail.key} className="flex items-stretch gap-3">
+            <div className="flex flex-col items-center">
+              <Skeleton className="size-6 rounded-full" />
+              {i < RAIL_STAGES.length - 1 && <Separator orientation="vertical" className="my-1 min-h-3 flex-1" />}
+            </div>
+            <Skeleton className="mb-1 h-8 flex-1 rounded-md" style={{ opacity: 1 - i * 0.12 }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** Stage state at rail index `i` relative to the derived current stage. */
 type StageState = 'done' | 'current' | 'locked' | 'pending'
 
@@ -185,7 +227,7 @@ function StageStepper({
               size="sm"
               variant={selected ? 'muted' : 'default'}
               render={<button type="button" onClick={() => store.selectStage(i)} />}
-              className={cn('mb-1 flex-1 text-left', selected && 'ring-1 ring-primary/25')}
+              className={cn('mb-1 flex-1 text-left transition-all duration-150', selected && 'ring-1 ring-primary/25')}
             >
               <ItemContent>
                 <ItemTitle className={cn(st === 'locked' && 'text-muted-foreground')}>
@@ -209,7 +251,7 @@ function StageStepper({
 }
 
 function StageBubble({ state }: { state: StageState }) {
-  const base = 'flex size-6 shrink-0 items-center justify-center rounded-full'
+  const base = 'flex size-6 shrink-0 items-center justify-center rounded-full transition-colors duration-150'
   if (state === 'current') {
     return (
       <span className={cn(base, 'bg-primary/15 text-primary ring-1 ring-primary/30')}>
@@ -360,8 +402,9 @@ function OverrideGate({
     setBusy(true)
     const error = await action()
     setBusy(false)
-    if (error) store.setError(error)
+    if (error) toast.error(error)
     else {
+      toast.success(closeDialog ? `${stage} gate overridden` : 'Override revoked')
       if (closeDialog) {
         setOpen(false)
         setReason('')
@@ -472,12 +515,15 @@ function TicketList({
 }) {
   const [busy, setBusy] = useState<string | null>(null)
 
-  const run = async (key: string, action: () => Promise<string | null>) => {
+  const run = async (key: string, action: () => Promise<string | null>, started: string) => {
     setBusy(key)
     const error = await action()
     setBusy(null)
-    if (error) store.setError(error)
-    else refresh()
+    if (error) toast.error(error)
+    else {
+      toast.success(started)
+      refresh()
+    }
   }
 
   if (tickets.length === 0) {
@@ -501,7 +547,7 @@ function TicketList({
       {tickets.map((t) => {
         const id = t.ref.id
         return (
-          <Item key={id} variant="outline" size="sm">
+          <Item key={id} variant="outline" size="sm" className="transition-shadow duration-150 hover:shadow-depth">
             <ItemContent className="flex-row flex-wrap items-center gap-2">
               <span className="font-mono text-xs">{t.ref.display}</span>
               {t.closed && <Badge variant="outline">closed</Badge>}
@@ -543,7 +589,9 @@ function TicketList({
                   variant="destructive"
                   size="sm"
                   disabled={busy !== null}
-                  onClick={() => void run(`reconcile:${id}`, () => store.startReconcile(effortId, id))}
+                  onClick={() =>
+                    void run(`reconcile:${id}`, () => store.startReconcile(effortId, id), 'Reconcile session started')
+                  }
                 >
                   {busy === `reconcile:${id}` ? <Spinner /> : <Zap />}
                   {busy === `reconcile:${id}` ? 'Starting…' : 'Reconcile'}
@@ -554,7 +602,9 @@ function TicketList({
                   variant="outline"
                   size="sm"
                   disabled={busy !== null}
-                  onClick={() => void run(`review:${id}`, () => store.startReview(effortId, id))}
+                  onClick={() =>
+                    void run(`review:${id}`, () => store.startReview(effortId, id), 'Review session started')
+                  }
                 >
                   {busy === `review:${id}` ? <Spinner /> : <Search />}
                   {busy === `review:${id}` ? 'Starting…' : t.pr.agentVerdict ? 'Review again' : 'Review'}
@@ -565,7 +615,9 @@ function TicketList({
                   variant="outline"
                   size="sm"
                   disabled={busy !== null}
-                  onClick={() => void run(`implement:${id}`, () => store.startImplement(effortId, id))}
+                  onClick={() =>
+                    void run(`implement:${id}`, () => store.startImplement(effortId, id), 'Implement session started')
+                  }
                 >
                   {busy === `implement:${id}` ? <Spinner /> : <Play />}
                   {busy === `implement:${id}` ? 'Starting…' : t.pr ? 'Implement again' : 'Implement'}
@@ -588,11 +640,17 @@ function LandEffort({ effortId, onDone }: { effortId: string; onDone: () => void
     setBusy(true)
     const res = await store.landEffort(effortId)
     setBusy(false)
-    if (res.error) store.setError(res.error)
-    else {
-      setResults(res.results ?? [])
-      onDone()
+    if (res.error) {
+      toast.error(res.error)
+      return
     }
+    const landed = res.results ?? []
+    setResults(landed)
+    const conflicts = landed.filter((r) => r.status === 'sync_session_started').length
+    if (conflicts > 0) toast.warning(`Landing hit conflicts — ${conflicts} sync session${conflicts === 1 ? '' : 's'} started`)
+    else if (landed.length > 0) toast.success('Effort landed — PRs opened')
+    else toast('Nothing to land — no repo grew an effort trunk')
+    onDone()
   }
 
   return (
@@ -650,14 +708,20 @@ function CompleteEffort({ effortId, onDone }: { effortId: string; onDone: () => 
     setBusy(true)
     const res = await store.completeEffort(effortId)
     setBusy(false)
-    if (res.error) store.setError(res.error)
-    else {
-      const keptCount = (res.results ?? []).reduce((n, r) => n + r.keptWorktrees.length, 0)
-      setKept(keptCount)
-      setMapClosed(res.mapClosed ?? false)
-      if (keptCount > 0) store.setInboxOpen(true)
-      onDone()
+    if (res.error) {
+      toast.error(res.error)
+      return
     }
+    const keptCount = (res.results ?? []).reduce((n, r) => n + r.keptWorktrees.length, 0)
+    setKept(keptCount)
+    setMapClosed(res.mapClosed ?? false)
+    if (keptCount > 0) {
+      store.setInboxOpen(true)
+      toast.warning(`Effort completed — ${keptCount} dirty worktree${keptCount === 1 ? '' : 's'} kept`)
+    } else {
+      toast.success(res.mapClosed ? 'Effort completed — map issue closed' : 'Effort completed')
+    }
+    onDone()
   }
 
   return (

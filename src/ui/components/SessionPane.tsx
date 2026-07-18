@@ -8,6 +8,7 @@
 
 import { ChevronRight, Pause, Terminal, TriangleAlert, X } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -77,9 +78,11 @@ export function SessionPane() {
 }
 
 function Chat({ view }: { view: SessionView }) {
+  const state = useStore()
   const { meta } = view
   const status = statusOf(view)
   const items = reduceTranscript(meta, view.events)
+  const disconnected = state.conn !== 'open'
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -93,13 +96,20 @@ function Chat({ view }: { view: SessionView }) {
         <CostBadge usage={meta.usage} />
         {meta.status === 'running' && (
           <>
-            <Button variant="ghost" size="icon-sm" title="interrupt the agent" onClick={() => store.interrupt(meta.id)}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title={disconnected ? 'Disconnected — reconnecting' : 'interrupt the agent'}
+              disabled={disconnected}
+              onClick={() => store.interrupt(meta.id)}
+            >
               <Pause />
             </Button>
             <Button
               variant="ghost"
               size="icon-sm"
-              title="kill the session"
+              title={disconnected ? 'Disconnected — reconnecting' : 'kill the session'}
+              disabled={disconnected}
               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={() => store.kill(meta.id)}
             >
@@ -114,8 +124,8 @@ function Chat({ view }: { view: SessionView }) {
           <MessageScrollerViewport>
             <MessageScrollerContent className="gap-4 p-4">
               {items.map((item, i) => (
-                <MessageScrollerItem key={i} scrollAnchor={i === items.length - 1}>
-                  <ChatMessage item={item} sessionId={meta.id} />
+                <MessageScrollerItem key={i} scrollAnchor={i === items.length - 1} className="animate-enter-soft">
+                  <ChatMessage item={item} sessionId={meta.id} disconnected={disconnected} />
                 </MessageScrollerItem>
               ))}
             </MessageScrollerContent>
@@ -124,12 +134,20 @@ function Chat({ view }: { view: SessionView }) {
         </MessageScroller>
       </MessageScrollerProvider>
 
-      <Composer view={view} />
+      <Composer view={view} disconnected={disconnected} />
     </div>
   )
 }
 
-function ChatMessage({ item, sessionId }: { item: ChatItem; sessionId: string }) {
+function ChatMessage({
+  item,
+  sessionId,
+  disconnected,
+}: {
+  item: ChatItem
+  sessionId: string
+  disconnected: boolean
+}) {
   switch (item.kind) {
     case 'user':
       return (
@@ -162,7 +180,7 @@ function ChatMessage({ item, sessionId }: { item: ChatItem; sessionId: string })
         </Marker>
       )
     case 'approval':
-      return <ApprovalCard item={item} sessionId={sessionId} />
+      return <ApprovalCard item={item} sessionId={sessionId} disconnected={disconnected} />
   }
 }
 
@@ -221,7 +239,15 @@ function formatValue(value: unknown): string {
 
 /** Inline approval-card particle (#8's canonical surface): the requested tool,
  *  a code block of the input, and Allow/Deny — resolved once answered. */
-function ApprovalCard({ item, sessionId }: { item: Extract<ChatItem, { kind: 'approval' }>; sessionId: string }) {
+function ApprovalCard({
+  item,
+  sessionId,
+  disconnected,
+}: {
+  item: Extract<ChatItem, { kind: 'approval' }>
+  sessionId: string
+  disconnected: boolean
+}) {
   const tinted = !item.resolved
   return (
     <Card
@@ -242,13 +268,18 @@ function ApprovalCard({ item, sessionId }: { item: Extract<ChatItem, { kind: 'ap
           {summarizeInput(item.input) ? formatValue(item.input) : summarizeOutput(item.input)}
         </pre>
         {!item.resolved && (
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => store.respondPermission(sessionId, item.id, { behavior: 'allow' })}>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              disabled={disconnected}
+              onClick={() => store.respondPermission(sessionId, item.id, { behavior: 'allow' })}
+            >
               Allow
             </Button>
             <Button
               size="sm"
               variant="outline"
+              disabled={disconnected}
               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={() =>
                 store.respondPermission(sessionId, item.id, { behavior: 'deny', message: 'denied from threadmap UI' })
@@ -256,6 +287,7 @@ function ApprovalCard({ item, sessionId }: { item: Extract<ChatItem, { kind: 'ap
             >
               Deny
             </Button>
+            {disconnected && <span className="text-xs text-muted-foreground">Disconnected — reconnecting…</span>}
           </div>
         )}
       </CardContent>
@@ -263,7 +295,7 @@ function ApprovalCard({ item, sessionId }: { item: Extract<ChatItem, { kind: 'ap
   )
 }
 
-function Composer({ view }: { view: SessionView }) {
+function Composer({ view, disconnected }: { view: SessionView; disconnected: boolean }) {
   const [text, setText] = useState('')
   const { meta } = view
   const ended = meta.status === 'ended'
@@ -273,6 +305,12 @@ function Composer({ view }: { view: SessionView }) {
   const submit = () => {
     const trimmed = text.trim()
     if (!trimmed) return
+    // Draft is allowed while the socket is down; the send itself is not — it
+    // would be dropped silently, so surface why instead.
+    if (disconnected) {
+      toast.error('Disconnected — reconnecting. Your draft is kept.')
+      return
+    }
     if (ended) {
       if (!resumable) return
       store.resumeSession(meta.id, trimmed)
@@ -318,7 +356,8 @@ function Composer({ view }: { view: SessionView }) {
             size="sm"
             variant="default"
             className="ml-auto"
-            disabled={disabled}
+            disabled={disabled || disconnected}
+            title={disconnected ? 'Disconnected — reconnecting' : undefined}
             onClick={submit}
           >
             {ended && resumable ? 'Resume' : 'Send'}
