@@ -13,7 +13,7 @@
 // global inbox links here, drafts survive a dropped socket.
 
 import { ChevronRight, Pause, Terminal, TriangleAlert, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -26,6 +26,7 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
+  useMessageScroller,
 } from '@/components/ui/message-scroller'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
@@ -111,6 +112,7 @@ function Chat({ view }: { view: SessionView }) {
   const items = reduceTranscript(meta, view.events)
   const disconnected = state.conn !== 'open'
   const repo = meta.cwd.split('/').filter(Boolean).pop()
+  const pendingApprovalIds = pendingApprovals(view.events).map((a) => a.id)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -174,6 +176,7 @@ function Chat({ view }: { view: SessionView }) {
             </MessageScrollerContent>
           </MessageScrollerViewport>
           <MessageScrollerButton />
+          <ApprovalAutoScroll ids={pendingApprovalIds} />
         </MessageScroller>
       </MessageScrollerProvider>
 
@@ -189,6 +192,38 @@ function itemKey(item: ChatItem, i: number): string {
   if (item.kind === 'tool') return `tool-${item.callId}`
   if (item.kind === 'approval') return `approval-${item.id}`
   return `${item.kind}-${i}`
+}
+
+/** Pull the transcript to a permission prompt the instant it needs the human —
+ *  whether it streams in for the session you're already watching or you deep-link
+ *  into a waiting one (#90). This is the deliberate exception to #89: ordinary
+ *  appended output must NOT yank a scrolled-up reader, but a blocking approval is
+ *  worth the interruption. The scroll fires ONLY on the absent→pending edge (an
+ *  id not seen before), so re-renders while you read the prompt never re-pull;
+ *  resolved ids drop out of `seen`, so a fresh request always re-triggers. Lives
+ *  inside the scroller provider so it can reach `scrollToMessage`. */
+function ApprovalAutoScroll({ ids }: { ids: string[] }) {
+  const { scrollToMessage } = useMessageScroller()
+  const seen = useRef<Set<string>>(new Set())
+  const latest = useRef(ids)
+  latest.current = ids
+  const key = ids.join(',')
+  useEffect(() => {
+    const fresh = latest.current.find((id) => !seen.current.has(id))
+    seen.current = new Set(latest.current)
+    if (!fresh) return
+    const target = `approval-${fresh}`
+    // Rows are virtualized (`content-visibility:auto` collapses off-screen items
+    // to a placeholder), so their real height resolves only as they scroll into
+    // view — a single scroll lands short of the prompt. Re-assert across a few
+    // frames until the layout settles on it. One-shot per fresh id, so a reader
+    // scrolling away after it lands isn't fought.
+    const timers = [0, 120, 300, 600].map((d) =>
+      setTimeout(() => scrollToMessage(target, { align: 'end' }), d),
+    )
+    return () => timers.forEach(clearTimeout)
+  }, [key, scrollToMessage])
+  return null
 }
 
 function ChatMessage({
