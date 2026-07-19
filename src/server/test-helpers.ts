@@ -7,6 +7,7 @@ import type {
   AgentSession,
   Capabilities,
   PermissionDecision,
+  PermissionMode,
   StartOptions,
   UserMessage,
 } from '../adapters/index.js'
@@ -14,6 +15,7 @@ import type {
 export class FakeSession implements AgentSession {
   sent: UserMessage[] = []
   permissions: Array<{ id: string; decision: PermissionDecision }> = []
+  permissionModes: PermissionMode[] = []
   interrupted = false
   killed = false
   resumeToken: Promise<string>
@@ -54,6 +56,9 @@ export class FakeSession implements AgentSession {
   respondPermission(id: string, decision: PermissionDecision): void {
     this.permissions.push({ id, decision })
   }
+  setPermissionMode(mode: PermissionMode): void {
+    this.permissionModes.push(mode)
+  }
   interrupt(): void {
     this.interrupted = true
   }
@@ -68,6 +73,7 @@ export class FakeAdapter implements AgentAdapter {
   readonly capabilities: Capabilities = {
     liveInput: true,
     livePermissions: true,
+    livePermissionMode: true,
     streamingText: true,
     reportsTokens: true,
     reportsCost: true,

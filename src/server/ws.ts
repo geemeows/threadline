@@ -4,7 +4,7 @@
 // tagged by session id. The handler is socket-agnostic — index.ts binds it to
 // @hono/node-ws, tests bind it to an array.
 
-import type { PermissionDecision } from '../adapters/index.js'
+import type { PermissionDecision, PermissionMode } from '../adapters/index.js'
 import type { SessionRegistry, StartSessionOptions } from './registry.js'
 
 export type ClientMessage =
@@ -14,6 +14,7 @@ export type ClientMessage =
   | { type: 'detach'; sessionId: string }
   | { type: 'send'; sessionId: string; text: string }
   | { type: 'permission'; sessionId: string; id: string; decision: PermissionDecision }
+  | { type: 'set_permission_mode'; sessionId: string; mode: PermissionMode }
   | {
       type: 'answer_question'
       sessionId: string
@@ -84,6 +85,9 @@ export function createConnection(
             break
           case 'permission':
             registry.respondPermission(msg.sessionId, msg.id, msg.decision)
+            break
+          case 'set_permission_mode':
+            await registry.setPermissionMode(msg.sessionId, msg.mode)
             break
           case 'answer_question':
             registry.answerQuestion(msg.sessionId, msg.callId, msg.questions, msg.answers)
