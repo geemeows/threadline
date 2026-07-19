@@ -13,6 +13,12 @@ export interface AgentSession {
   events: AsyncIterable<AgentEvent>
   send(msg: UserMessage): void
   respondPermission(id: string, decision: PermissionDecision): void
+  /**
+   * Change the permission mode of a running session. A no-op on adapters
+   * without `livePermissionMode` — callers gate on the capability and fall back
+   * to applying the mode on the next resume.
+   */
+  setPermissionMode(mode: PermissionMode): void
   interrupt(): void
   kill(): void
   /** Adapter-minted opaque token; resolves once the session is identifiable. */
@@ -32,8 +38,11 @@ export interface StartOptions {
   env?: Record<string, string>
 }
 
+/** The static/interactive gating stance a session runs under. */
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+
 export interface PermissionPolicy {
-  mode: 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+  mode: PermissionMode
   allowedTools?: string[]
   disallowedTools?: string[]
   /**
@@ -62,6 +71,8 @@ export interface Capabilities {
   liveInput: boolean
   /** Mid-run permission_request events (vs static policy only). */
   livePermissions: boolean
+  /** --permission-mode can be changed mid-run (vs only at start/resume). */
+  livePermissionMode: boolean
   /** assistant_delta events. */
   streamingText: boolean
   reportsTokens: boolean

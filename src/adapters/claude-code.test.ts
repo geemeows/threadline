@@ -287,6 +287,16 @@ describe('ClaudeCodeSession', () => {
     expect(lines.at(-1)).toMatchObject({ type: 'control_request', request: { subtype: 'interrupt' } })
   })
 
+  it('setPermissionMode() sends a set_permission_mode control request', () => {
+    const { child, session } = makeSession()
+    session.setPermissionMode('acceptEdits')
+    const lines = child.stdinLines() as any[]
+    expect(lines.at(-1)).toMatchObject({
+      type: 'control_request',
+      request: { subtype: 'set_permission_mode', mode: 'acceptEdits' },
+    })
+  })
+
   it('rejects resumeToken when the session dies before init', async () => {
     const { child, session } = makeSession()
     child.close()
