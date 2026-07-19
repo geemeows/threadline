@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionRegistry, StartSessionOptions } from '../server/registry.js'
 import type { SessionMeta } from '../server/transcripts.js'
-import type { PRInfo, PRSource } from '../gating/types.js'
+import type { PRInfo, PRSource, Stage, StageSnapshot } from '../gating/types.js'
+import { STAGES } from '../gating/types.js'
 import type { TicketRef, TrackerAdapter } from '../tracker/types.js'
 import type { Exec } from './git.js'
 import { PipelineOrchestrator, type OrchestratorDeps } from './orchestrator.js'
@@ -68,6 +69,23 @@ function fakePrSource(byTicket: Record<string, PRInfo | null> = {}): PRSource {
   }
 }
 
+/** A snapshot parked at `stage`: every earlier gate met, this one and later unmet. */
+function snapshotAt(stage: Stage): StageSnapshot {
+  const idx = STAGES.indexOf(stage)
+  return {
+    stage,
+    gates: STAGES.map((s, i) => ({
+      stage: s,
+      met: i < idx,
+      overridden: false,
+      unmet: i < idx ? [] : [`${s} not done`],
+    })),
+    tickets: [],
+    readyToComplete: false,
+    warnings: [],
+  }
+}
+
 function makeDeps(over: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
   return {
     workspace: { root: '/ws', repos: [{ name: 'web', path: '/ws/web' }] },
@@ -76,6 +94,7 @@ function makeDeps(over: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
     prSource: fakePrSource(),
     resolveRepoDir: () => '/ws/web',
     mintEffortRef: (id) => ({ id, display: id, url: `https://github.com/acme/home/issues/1` }),
+    snapshot: async () => snapshotAt('implement'),
     ...over,
   }
 }
@@ -120,6 +139,35 @@ describe('startImplement', () => {
   it('rejects tickets that are not children of the effort', async () => {
     const orch = new PipelineOrchestrator(makeDeps({ exec: fakeExec({}).exec }))
     await expect(orch.startImplement(EFFORT_ID, 'acme/web#99')).rejects.toThrow(/not a ticket child/)
+  })
+
+  it('refuses to implement before the to-tickets gate passes, naming the blocking gate', async () => {
+    const { calls, exec } = fakeExec({})
+    const orch = new PipelineOrchestrator(
+      makeDeps({ exec, snapshot: async () => snapshotAt('to-tickets') }),
+    )
+    await expect(orch.startImplement(EFFORT_ID, TICKET.id)).rejects.toThrow(
+      /isn't ready to implement.*to-tickets/,
+    )
+    // Blocked before any git side effect — a /wayfinder skip can't reach code.
+    expect(calls).toHaveLength(0)
+  })
+
+  it('refuses to implement while the effort is still in planning or to-spec', async () => {
+    const orch = new PipelineOrchestrator(makeDeps({ snapshot: async () => snapshotAt('to-spec') }))
+    await expect(orch.startImplement(EFFORT_ID, TICKET.id)).rejects.toThrow(/to-spec/)
+  })
+
+  it('allows implement once the to-tickets gate is overridden', async () => {
+    const overridden = snapshotAt('implement') // deriveStage skips overridden gates, so it reports implement
+    const { registry, started } = fakeRegistry()
+    const { exec } = fakeExec({
+      'ls-remote --heads origin tm/effort/1': 'abc\trefs/heads/tm/effort/1\n',
+      'worktree list': `worktree /ws/web\n\nworktree ${WT}\n`,
+    })
+    const orch = new PipelineOrchestrator(makeDeps({ registry, exec, snapshot: async () => overridden }))
+    await orch.startImplement(EFFORT_ID, TICKET.id)
+    expect(started[0]!.stage).toBe('implement')
   })
 })
 

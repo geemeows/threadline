@@ -71,8 +71,8 @@ export function createApp(deps: AppDeps) {
   const orchestrator = () =>
     (orchestratorPromise ??= deps.orchestrator
       ? Promise.resolve(deps.orchestrator)
-      : trackerContext().then(
-          (ctx) =>
+      : Promise.all([trackerContext(), stageService()]).then(
+          ([ctx, stage]) =>
             new PipelineOrchestrator({
               workspace,
               registry,
@@ -80,6 +80,7 @@ export function createApp(deps: AppDeps) {
               prSource: ctx.deps.prSource,
               resolveRepoDir: ctx.deps.resolveRepoDir,
               mintEffortRef: ctx.mintEffortRef,
+              snapshot: (effortId) => stage.snapshot(effortId),
               ...(deps.exec ? { exec: deps.exec } : {}),
             }),
         ))

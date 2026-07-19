@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import type { SessionMeta } from '../server/transcripts.js'
 import type { SessionRegistry } from '../server/registry.js'
 import type { Workspace } from '../server/workspace.js'
-import type { PRSource, RepoResolver } from '../gating/types.js'
+import type { PRSource, RepoResolver, StageSnapshot } from '../gating/types.js'
 import { refSlug, trunkBranch } from '../gating/branches.js'
 import { closeEffort } from '../gating/override.js'
 import type { TicketRef, TrackerAdapter } from '../tracker/types.js'
@@ -39,6 +39,8 @@ export interface OrchestratorDeps {
   resolveRepoDir: RepoResolver
   /** Tracker-specific effort ref minting (stage.ts owns the rule). */
   mintEffortRef: (id: string) => TicketRef
+  /** Derived stage of an effort — the hard gate on startImplement reads this. */
+  snapshot: (effortId: string) => Promise<StageSnapshot>
   exec?: Exec
 }
 
@@ -83,6 +85,13 @@ export class PipelineOrchestrator {
    */
   async startImplement(effortId: string, ticketId: string): Promise<SessionMeta> {
     const effort = this.deps.mintEffortRef(effortId)
+    // Gate before any git side effect: implementing writes code, and ADR-0002
+    // makes to-tickets the last checkpoint before agents do — spec approved plus
+    // the human `ticketed` sign-off. Refuse anything earlier so a /wayfinder that
+    // mints premature `threadmap:ticket` issues (skipping /to-spec + /to-tickets)
+    // can't be coded until the pipeline vets them, or a gate override is recorded.
+    // Derived, so it holds no matter who calls startImplement.
+    await this.assertImplementable(effortId, ticketId)
     const ticket = await this.findTicket(effort, ticketId)
     const { repoDir, repoName } = await this.repoFor(ticket)
     const trunk = trunkBranch(effort)
@@ -110,6 +119,22 @@ export class PipelineOrchestrator {
       effort: effortId,
       stage: 'implement',
     })
+  }
+
+  /** Throws unless the effort's derived stage has reached implement (i.e. the
+   *  to-tickets gate passed or was overridden). The thrown message names the
+   *  blocking gate and its unmet conditions so the caller knows the way forward. */
+  private async assertImplementable(effortId: string, ticketId: string): Promise<void> {
+    const snapshot = await this.deps.snapshot(effortId)
+    if (snapshot.stage === 'implement' || snapshot.stage === 'code-review') return
+    const blocking = snapshot.gates.find((g) => !g.met && !g.overridden)
+    const why = blocking
+      ? `the ${blocking.stage} gate hasn't passed (${blocking.unmet.join('; ')})`
+      : `the effort is still at ${snapshot.stage}`
+    throw new Error(
+      `Ticket ${ticketId} isn't ready to implement — ${why}. ` +
+        `Run the effort through /to-spec and /to-tickets first, or record a gate override on the map issue.`,
+    )
   }
 
   /**
