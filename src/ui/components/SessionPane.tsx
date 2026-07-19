@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/message-scroller'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
+import { Markdown } from './Markdown.js'
 import { adhocSessions, effortSessions, sessionLabel, statusOf } from '../lib/derive.js'
 import { store, useStore } from '../lib/store.js'
 import type { SessionView } from '../lib/store.js'
@@ -205,16 +206,16 @@ function ChatMessage({
   switch (item.kind) {
     case 'user':
       return (
-        <div className="ml-auto max-w-[82%] rounded-[13px_13px_4px_13px] border border-[var(--border2)] bg-[var(--surface2)] px-[13px] py-[9px] text-[13px] whitespace-pre-wrap text-foreground">
-          {item.text}
+        <div className="ml-auto max-w-[82%] rounded-[13px_13px_4px_13px] border border-[var(--border2)] bg-[var(--surface2)] px-[13px] py-[9px] text-[13px] text-foreground">
+          <Markdown text={item.text} />
         </div>
       )
     case 'agent':
       return (
         <div className="flex max-w-[86%] gap-2.5">
           <AgentAvatar />
-          <div className="min-w-0 text-[13px] whitespace-pre-wrap text-foreground">
-            {item.text}
+          <div className="min-w-0 text-[13px] text-foreground">
+            <Markdown text={item.text} />
             {item.streaming && <Spinner className="ml-1.5 inline size-3 align-middle text-muted-foreground" />}
           </div>
         </div>
