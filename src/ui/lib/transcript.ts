@@ -1,7 +1,24 @@
 // Pure reduction of a session's transcript stream into renderable chat items.
 // Keeps every rendering rule out of components so it's unit-testable.
 
-import type { SessionMeta, SessionStatus, TranscriptEvent } from './types.js'
+import type { PermissionMode, SessionMeta, SessionStatus, TranscriptEvent } from './types.js'
+
+/** The three gating stances the composer switch (#91) offers, in escalating
+ *  looseness. `plan` is intentionally omitted — that's still fog on the map. */
+export const PERMISSION_MODES: {
+  mode: PermissionMode
+  label: string
+  description: string
+}[] = [
+  { mode: 'default', label: 'Normal', description: 'Ask before each tool the policy gates.' },
+  { mode: 'acceptEdits', label: 'Accept edits', description: 'Auto-approve file edits; still ask for the rest.' },
+  { mode: 'bypassPermissions', label: 'Auto', description: 'Run every tool without asking. Use with care.' },
+]
+
+/** Human label for a mode; falls back to the raw value for `plan`/unknowns. */
+export function permissionModeLabel(mode: PermissionMode): string {
+  return PERMISSION_MODES.find((m) => m.mode === mode)?.label ?? mode
+}
 
 export type ToolItem = {
   kind: 'tool'
@@ -131,6 +148,10 @@ export function reduceTranscript(meta: SessionMeta, events: TranscriptEvent[]): 
       case 'session_ended':
         closeStream()
         items.push({ kind: 'system', text: `session ended — ${event.outcome}` })
+        break
+      case 'permission_mode':
+        closeStream()
+        items.push({ kind: 'system', text: `permission mode → ${permissionModeLabel(event.mode)}` })
         break
       case 'session_started':
       case 'usage_update':

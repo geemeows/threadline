@@ -9,6 +9,7 @@ import type {
   EffortSummary,
   LandResult,
   PermissionDecision,
+  PermissionMode,
   ServerMessage,
   SessionMeta,
   SetupStatus,
@@ -200,6 +201,7 @@ export class Store {
     const meta = { ...view.meta }
     if (event.type === 'usage_update') meta.usage = event.usage
     if (event.type === 'session_started') meta.resumeToken = event.resumeToken
+    if (event.type === 'permission_mode') meta.permissionMode = event.mode
     if (event.type === 'session_ended') {
       meta.status = 'ended'
       meta.outcome = event.outcome
@@ -267,6 +269,22 @@ export class Store {
 
   respondPermission(sessionId: string, id: string, decision: PermissionDecision) {
     this.sendWs({ type: 'permission', sessionId, id, decision })
+  }
+
+  /** Change a session's permission mode (#91). Optimistically reflects it on the
+   *  session's meta so the composer switch feels instant; the server echoes a
+   *  `permission_mode` event that re-asserts the same value and persists it. */
+  setPermissionMode(sessionId: string, mode: PermissionMode) {
+    const view = this.state.sessions[sessionId]
+    if (view) {
+      this.set({
+        sessions: {
+          ...this.state.sessions,
+          [sessionId]: { ...view, meta: { ...view.meta, permissionMode: mode } },
+        },
+      })
+    }
+    this.sendWs({ type: 'set_permission_mode', sessionId, mode })
   }
 
   /** Route an AskUserQuestion selection back to the agent as its tool_result. */

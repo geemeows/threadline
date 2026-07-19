@@ -12,13 +12,14 @@
 // Behavior is unchanged from the #8/#66 pane — approvals resolve inline, the
 // global inbox links here, drafts survive a dropped socket.
 
-import { ChevronRight, Pause, Terminal, TriangleAlert, X } from 'lucide-react'
+import { ChevronRight, Pause, ShieldCheck, Terminal, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Kbd } from '@/components/ui/kbd'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -34,7 +35,14 @@ import { Markdown } from './Markdown.js'
 import { adhocSessions, effortSessions, sessionLabel, statusOf } from '../lib/derive.js'
 import { store, useStore } from '../lib/store.js'
 import type { SessionView } from '../lib/store.js'
-import { pendingApprovals, reduceTranscript, summarizeInput, summarizeOutput } from '../lib/transcript.js'
+import {
+  PERMISSION_MODES,
+  pendingApprovals,
+  permissionModeLabel,
+  reduceTranscript,
+  summarizeInput,
+  summarizeOutput,
+} from '../lib/transcript.js'
 import type { ChatItem, QuestionItem, QuestionSpec, ToolItem } from '../lib/transcript.js'
 import { MintPill, StatusBadge, StatusDot } from './particles.js'
 
@@ -566,6 +574,51 @@ function PendingApprovalBar({
   )
 }
 
+/** Per-session permission-mode switch (#91): Normal / Accept edits / Auto map to
+ *  the adapter's `default` / `acceptEdits` / `bypassPermissions`. On a running
+ *  session whose adapter can change mode mid-run (claude-code can) the change
+ *  applies live; otherwise it rides the next resume. Lives in the composer per
+ *  the map's locked decision (per-session, not a global default). */
+function PermissionModeSelect({ view, disconnected }: { view: SessionView; disconnected: boolean }) {
+  const { meta } = view
+  const mode = meta.permissionMode ?? 'default'
+  const running = meta.status === 'running'
+  const live = running && meta.livePermissionMode !== false
+  // Mid-run reality (verified against the CLI): Normal↔Accept edits flip live,
+  // but Auto (bypassPermissions) can't be turned on mid-run — the CLI would need
+  // relaunching without the stdio permission tool — so it lands on the next
+  // resume. Say so, rather than implying every change is instant.
+  const hint = live
+    ? 'How tools are gated for this session. Normal and Accept edits apply immediately; Auto takes effect on the next resume.'
+    : running
+      ? 'This adapter can’t change mode mid-run — applies on the next resume.'
+      : 'Applies when you resume this session.'
+  return (
+    <Select value={mode} onValueChange={(v) => v && store.setPermissionMode(meta.id, v as typeof mode)}>
+      <SelectTrigger
+        size="sm"
+        disabled={disconnected}
+        title={hint}
+        aria-label={`Permission mode: ${permissionModeLabel(mode)}`}
+        className="gap-1 border-transparent bg-transparent px-2 text-[11px] text-[var(--fg3)] hover:text-foreground"
+      >
+        <ShieldCheck className="size-3.5" />
+        <SelectValue>{(v) => permissionModeLabel(v as typeof mode)}</SelectValue>
+      </SelectTrigger>
+      <SelectContent side="top" align="end" alignItemWithTrigger={false} className="min-w-60">
+        {PERMISSION_MODES.map((m) => (
+          <SelectItem key={m.mode} value={m.mode}>
+            <span className="flex flex-col gap-0.5 py-0.5">
+              <span className="text-[13px] font-medium text-foreground">{m.label}</span>
+              <span className="text-[11px] text-[var(--fg3)]">{m.description}</span>
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 /** Command chips over the composer — clickable quick-inserts that prefill the
  *  textarea (the mockup's `/spec` `/override` `@ticket` affordances, made real). */
 const COMPOSER_CHIPS: { insert: string; cmd: string; label?: string }[] = [
@@ -646,16 +699,18 @@ function Composer({ view, disconnected }: { view: SessionView; disconnected: boo
         />
         <div className="mt-1.5 flex items-center gap-2.5">
           <span className="text-[11px] text-[var(--fg3)]">headless · {meta.adapter}</span>
-          <Button
-            size="sm"
-            className="ml-auto"
-            disabled={disabled || disconnected}
-            title={disconnected ? 'Disconnected — reconnecting' : undefined}
-            onClick={submit}
-          >
-            {ended && resumable ? 'Resume' : 'Send'}
-            <Kbd className="bg-primary-foreground/15 text-primary-foreground">⏎</Kbd>
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {!disabled && <PermissionModeSelect view={view} disconnected={disconnected} />}
+            <Button
+              size="sm"
+              disabled={disabled || disconnected}
+              title={disconnected ? 'Disconnected — reconnecting' : undefined}
+              onClick={submit}
+            >
+              {ended && resumable ? 'Resume' : 'Send'}
+              <Kbd className="bg-primary-foreground/15 text-primary-foreground">⏎</Kbd>
+            </Button>
+          </div>
         </div>
       </div>
     </div>
