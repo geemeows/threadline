@@ -11,10 +11,10 @@ import type { Exec } from '../pipeline/git.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { listEfforts } from './efforts.js'
 import { createPipelineApp, type OverrideContext } from './pipeline-routes.js'
-import { SessionRegistry } from './registry.js'
+import { SessionRegistry, type TrackerMcpFactory } from './registry.js'
 import { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
 import { handleMcpMessage } from './question-mcp.js'
-import { createStageService, createTrackerContext, trackerWhoami, type StageService, type TrackerContext } from './stage.js'
+import { createStageService, createTrackerContext, loadTrackerConfig, trackerWhoami, type StageService, type TrackerContext } from './stage.js'
 import { TranscriptStore } from './transcripts.js'
 import { createConnection } from './ws.js'
 import { discoverWorkspace, type Workspace } from './workspace.js'
@@ -175,6 +175,30 @@ export function createApp(deps: AppDeps) {
   return { app, injectWebSocket }
 }
 
+/**
+ * Per-session tracker write path (#19 §7): Linear workspaces get the
+ * threadmap-tracker stdio MCP server injected into every session, re-invoking
+ * this same CLI (`threadmap tracker-mcp --org … --stage …`) so create_issue
+ * enforces the pipeline order per stage (gate #2). GitHub workspaces use `gh`
+ * and get no injection — resolved once at startup, from the workspace config.
+ */
+async function trackerMcpFactory(root: string): Promise<TrackerMcpFactory | undefined> {
+  const config = await loadTrackerConfig(root)
+  if (config.tracker !== 'linear') return undefined
+  const orgId = config.linear?.orgId
+  const cli = process.argv[1]
+  if (!cli) return undefined // no self-reference to re-invoke; skip rather than mis-spawn
+  return (stage) => ({
+    command: process.execPath,
+    args: [
+      cli,
+      'tracker-mcp',
+      ...(orgId ? ['--org', orgId] : []),
+      ...(stage ? ['--stage', stage] : []),
+    ],
+  })
+}
+
 export async function startServer(port = DEFAULT_PORT, root = process.cwd()) {
   const workspace = await discoverWorkspace(root)
   const store = new TranscriptStore()
@@ -185,6 +209,7 @@ export async function startServer(port = DEFAULT_PORT, root = process.cwd()) {
     store,
     undefined,
     `http://127.0.0.1:${port}`,
+    await trackerMcpFactory(root),
   )
   const { app, injectWebSocket } = createApp({ workspace, registry, store })
 

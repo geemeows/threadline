@@ -28,6 +28,17 @@ export interface StartSessionOptions extends StartOptions {
   stage?: string
 }
 
+/** MCP config key (and tool prefix, `mcp__threadmap-tracker__*`) for the
+ *  per-session tracker write path — matches the server name in tracker/mcp.ts. */
+export const TRACKER_MCP_KEY = 'threadmap-tracker'
+
+/**
+ * Builds the per-session tracker-mcp stdio server entry for the given stage, or
+ * undefined when the workspace has no tracker write path to inject (GitHub, which
+ * uses `gh`). Returned in the CLI's native mcp-server shape (`{ command, args }`).
+ */
+export type TrackerMcpFactory = (stage: string | undefined) => Record<string, unknown> | undefined
+
 export type SessionListener = (event: TranscriptEvent) => void
 
 interface LiveSession {
@@ -57,6 +68,9 @@ export class SessionRegistry {
     /** Base URL of threadmap's own HTTP server, e.g. `http://127.0.0.1:4664`.
      *  When set, planning sessions get the question MCP tool wired in. */
     private questionMcpBaseUrl?: string,
+    /** When set, every session gets the tracker write path wired in, bound to
+     *  its stage so create_issue enforces the pipeline order (Linear only). */
+    private trackerMcp?: TrackerMcpFactory,
   ) {}
 
   start(opts: StartSessionOptions): SessionMeta {
@@ -179,7 +193,7 @@ export class SessionRegistry {
     // The MCP URL is per-session, so mint the id first and hand the adapter the
     // options already carrying the question tool (planning sessions only).
     const id = randomUUID()
-    const session = spawn(this.withQuestionTool(id, opts))
+    const session = spawn(this.augmentPlanning(id, this.withTrackerMcp(opts)))
     const meta: SessionMeta = {
       id,
       adapter: adapterName,
@@ -203,6 +217,47 @@ export class SessionRegistry {
     void this.store.writeMeta(meta).catch(() => {})
     void this.pump(entry, session.events)
     return meta
+  }
+
+  /** Wire the tracker write path (Linear) into a session, bound to its stage so
+   *  create_issue enforces pipeline order at the one write path (gate #2). No-op
+   *  when no factory is set (GitHub workspaces use `gh`). */
+  private withTrackerMcp(opts: StartSessionOptions): StartSessionOptions {
+    const server = this.trackerMcp?.(opts.stage)
+    if (!server) return opts
+    return {
+      ...opts,
+      mcpConfig: {
+        servers: { ...(opts.mcpConfig?.servers ?? {}), [TRACKER_MCP_KEY]: server },
+        ...(opts.mcpConfig?.strict ? { strict: true } : {}),
+      },
+    }
+  }
+
+  /** Planning-only session augmentation: the "plan, don't do" guardrail always,
+   *  plus the ask_user_questions tool when the question MCP is available. */
+  private augmentPlanning(id: string, opts: StartSessionOptions): StartSessionOptions {
+    if (opts.stage !== 'planning') return opts
+    const guarded = this.withPlanningGuardrail(opts)
+    return this.questionMcpBaseUrl ? this.withQuestionTool(id, guarded) : guarded
+  }
+
+  /** Planning is decisions, not deliverables (ADR-0002). The hard gate on
+   *  startImplement enforces this downstream; this nudge keeps the wayfinder map
+   *  free of implementation tickets/spec in the first place, so /wayfinder stops
+   *  emitting "implement: …" work that skips /to-spec and /to-tickets. */
+  private withPlanningGuardrail(opts: StartSessionOptions): StartSessionOptions {
+    const nudge =
+      `You are in the planning (/wayfinder) stage. Produce planning decisions only — ` +
+      `wayfinder:* children on the map issue. Do NOT create implementation tickets ` +
+      `(threadmap:ticket) or the spec (threadmap:spec), and do NOT start writing feature code here. ` +
+      `Implementation tickets are created later by /to-tickets, after /to-spec and the human ` +
+      `"ticketed" sign-off. When work feels ready to build, that's the signal to finish the map and ` +
+      `hand off — not to do it now.`
+    return {
+      ...opts,
+      appendSystemPrompt: opts.appendSystemPrompt ? `${opts.appendSystemPrompt}\n\n${nudge}` : nudge,
+    }
   }
 
   /** Wire the ask_user_questions MCP tool into planning sessions (no-op

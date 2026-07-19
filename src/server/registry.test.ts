@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { TranscriptEvent } from './transcripts.js'
-import { RegistryError, SessionRegistry } from './registry.js'
+import { RegistryError, SessionRegistry, TRACKER_MCP_KEY, type TrackerMcpFactory } from './registry.js'
 import { TranscriptStore } from './transcripts.js'
 import { FakeAdapter, eventually } from './test-helpers.js'
 
@@ -188,5 +188,62 @@ describe('SessionRegistry question bridge', () => {
     const opts = adapter.sessions[0]!.opts
     expect(opts.mcpConfig).toBeUndefined()
     expect(opts.appendSystemPrompt).toBeUndefined()
+  })
+})
+
+describe('SessionRegistry planning guardrail', () => {
+  it('injects the "plan, don\'t do" guardrail into planning sessions even without the question MCP', () => {
+    registry.start(startOpts)
+    const opts = adapter.sessions[0]!.opts
+    expect(opts.appendSystemPrompt).toMatch(/planning \(\/wayfinder\) stage/)
+    expect(opts.appendSystemPrompt).toMatch(/Do NOT create implementation tickets/)
+  })
+
+  it('does not inject the guardrail into non-planning sessions', () => {
+    registry.start({ ...startOpts, stage: 'implement' })
+    expect(adapter.sessions[0]!.opts.appendSystemPrompt).toBeUndefined()
+  })
+})
+
+describe('SessionRegistry tracker MCP injection (gate #2)', () => {
+  const factory: TrackerMcpFactory = (stage) => ({
+    command: 'node',
+    args: ['cli.js', 'tracker-mcp', '--org', 'org-1', ...(stage ? ['--stage', stage] : [])],
+  })
+
+  it('injects the tracker write path bound to the session stage', () => {
+    const reg = new SessionRegistry({ fake: adapter }, store, undefined, undefined, factory)
+    reg.start({ ...startOpts, stage: 'to-tickets' })
+    const servers = adapter.sessions[0]!.opts.mcpConfig?.servers as Record<string, unknown>
+    expect(servers[TRACKER_MCP_KEY]).toEqual({
+      command: 'node',
+      args: ['cli.js', 'tracker-mcp', '--org', 'org-1', '--stage', 'to-tickets'],
+    })
+  })
+
+  it('injects into every stage, not just planning', () => {
+    const reg = new SessionRegistry({ fake: adapter }, store, undefined, undefined, factory)
+    reg.start({ ...startOpts, stage: 'implement' })
+    const servers = adapter.sessions[0]!.opts.mcpConfig?.servers as Record<string, unknown>
+    expect(servers[TRACKER_MCP_KEY]).toMatchObject({ args: expect.arrayContaining(['--stage', 'implement']) })
+  })
+
+  it('does not inject when no factory is set (GitHub workspaces use gh)', () => {
+    registry.start({ ...startOpts, stage: 'planning' })
+    expect(adapter.sessions[0]!.opts.mcpConfig?.servers).toBeUndefined()
+  })
+
+  it('composes with the question MCP tool on planning sessions', () => {
+    const reg = new SessionRegistry(
+      { fake: adapter },
+      store,
+      undefined,
+      'http://127.0.0.1:4664',
+      factory,
+    )
+    reg.start(startOpts)
+    const servers = adapter.sessions[0]!.opts.mcpConfig?.servers as Record<string, unknown>
+    expect(servers[TRACKER_MCP_KEY]).toBeDefined()
+    expect(servers.threadmap).toBeDefined() // the question MCP server
   })
 })
