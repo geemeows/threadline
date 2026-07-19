@@ -154,20 +154,19 @@ function Chat({ view }: { view: SessionView }) {
           <MessageScrollerViewport>
             <MessageScrollerContent className="gap-[13px] px-4 py-[18px]">
               {items.map((item, i) => {
-                // A stable per-message identity is what lets the scroller's
-                // stick-to-bottom track which item is which; without it (the
-                // old index-only key left messageId undefined) a fresh
-                // scrollAnchor read as unhandled and yanked the view down while
-                // you were reading history. Tools/approvals carry natural ids;
-                // append-only text items key off their position.
+                // Each row gets a stable `messageId` (identity for the scroller's
+                // visibility/anchor bookkeeping) but is DELIBERATELY not a
+                // `scrollAnchor` (#89). A scrollAnchor is an auto-scroll *target*:
+                // when a new anchored item mounts, the scroller force-scrolls to
+                // align it — so marking the last item anchor yanked the reader to
+                // the bottom on every appended turn, overriding a scrolled-up
+                // read. Anchorless + `autoScroll defaultScrollPosition="end"` IS
+                // the follow-only-when-pinned-to-bottom behavior we want; the
+                // Jump-to-latest pill re-attaches. Tools/approvals carry natural
+                // ids; append-only text items key off their position.
                 const id = itemKey(item, i)
                 return (
-                  <MessageScrollerItem
-                    key={id}
-                    messageId={id}
-                    scrollAnchor={i === items.length - 1}
-                    className="animate-enter-soft"
-                  >
+                  <MessageScrollerItem key={id} messageId={id} className="animate-enter-soft">
                     <ChatMessage item={item} sessionId={meta.id} stage={meta.stage} disconnected={disconnected} />
                   </MessageScrollerItem>
                 )
