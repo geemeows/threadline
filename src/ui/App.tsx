@@ -14,6 +14,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { CommandPalette } from './components/CommandPalette.js'
 import { EffortsTree } from './components/EffortsTree.js'
 import { Inbox } from './components/Inbox.js'
+import { NewEffortDialog } from './components/NewEffortDialog.js'
 import { NewSessionDialog } from './components/NewSessionDialog.js'
 import { OnboardingWizard } from './components/OnboardingWizard.js'
 import { PipelineRail } from './components/PipelineRail.js'
@@ -86,6 +87,7 @@ export function App() {
       </div>
       <CommandPalette />
       <Inbox />
+      <NewEffortDialog />
       <NewSessionDialog />
       <SetupPanel />
         </>

@@ -49,6 +49,9 @@ export interface State {
   /** Rail stage the user is inspecting; null = the effort's current stage. */
   selectedStageIdx: number | null
   inboxOpen: boolean
+  /** New-effort modal (#106): mints a wayfinder:map, distinct from the
+   *  per-effort session modal. */
+  newEffortOpen: boolean
   newSessionOpen: boolean
   /** Effort the New-session modal binds to, set by whoever opened it; null = an
    *  effort-less (ad-hoc) session. Never read from `selectedEffort` — the
@@ -79,6 +82,7 @@ export class Store {
     selectedSession: null,
     selectedStageIdx: null,
     inboxOpen: false,
+    newEffortOpen: false,
     newSessionOpen: false,
     newSessionEffort: null,
     paletteOpen: false,
@@ -448,6 +452,29 @@ export class Store {
 
   setInboxOpen(open: boolean) {
     this.set({ inboxOpen: open })
+  }
+
+  setNewEffortOpen(open: boolean) {
+    this.set({ newEffortOpen: open })
+  }
+
+  /**
+   * Mint a brand-new effort (#106): POST the idea + home repo, then adopt the
+   * returned effort into the list and select it. Returns an error string on
+   * failure, else null. (The auto-kickoff planning session is #110 — this
+   * action stops at minting the map and surfacing the new effort.)
+   */
+  async mintEffort(repo: string, idea: string): Promise<string | null> {
+    const res = await mutateJson<EffortSummary>('/api/efforts', 'POST', { repo, idea })
+    if (res.error) return res.error
+    if (res.data) {
+      const effort = res.data
+      const efforts = this.state.efforts.some((e) => e.ref.id === effort.ref.id)
+        ? this.state.efforts
+        : [...this.state.efforts, effort]
+      this.set({ efforts, selectedEffort: effort.ref.id, selectedStageIdx: null, newEffortOpen: false })
+    }
+    return null
   }
 
   /** Open/close the New-session modal, binding it to `effort` (null = ad-hoc).
