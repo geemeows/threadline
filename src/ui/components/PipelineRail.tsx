@@ -322,7 +322,7 @@ function StageStepper({
                       {sessionCount} session{sessionCount === 1 ? '' : 's'} on this effort — docked on the right.
                     </span>
                     <span className="flex-1" />
-                    <Button size="sm" onClick={() => store.setNewSessionOpen(true)}>
+                    <Button size="sm" onClick={() => store.setNewSessionOpen(true, effortId)}>
                       <Play />
                       Start session
                     </Button>

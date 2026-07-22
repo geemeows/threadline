@@ -103,6 +103,46 @@ describe('ws connection', () => {
     expect(sent[2]).toMatchObject({ type: 'error', message: expect.stringContaining('wat') })
   })
 
+  it('derives the stage from the bound effort and stamps it before start', async () => {
+    const conn = createConnection(registry, (m) => sent.push(m), async () => 'implement')
+    await conn.onMessage(
+      JSON.stringify({
+        type: 'start_session',
+        cwd: '/repo',
+        prompt: 'go',
+        effort: 'o/r#1',
+        permissionPolicy: { mode: 'default', intercept: true },
+      }),
+    )
+    expect(sent[0]).toMatchObject({ type: 'session', meta: { effort: 'o/r#1', stage: 'implement' } })
+  })
+
+  it('leaves an effort-less start stage-less', async () => {
+    const conn = createConnection(registry, (m) => sent.push(m), async () => 'implement')
+    await conn.onMessage(startMsg) // no effort
+    const meta = (sent[0] as { meta: { effort?: string; stage?: string } }).meta
+    expect(meta.effort).toBeUndefined()
+    expect(meta.stage).toBeUndefined()
+  })
+
+  it('starts stage-agnostic (no throw) when the snapshot is unavailable', async () => {
+    const conn = createConnection(registry, (m) => sent.push(m), async () => {
+      throw new Error('tracker offline')
+    })
+    await conn.onMessage(
+      JSON.stringify({
+        type: 'start_session',
+        cwd: '/repo',
+        prompt: 'go',
+        effort: 'o/r#1',
+        permissionPolicy: { mode: 'default', intercept: true },
+      }),
+    )
+    expect(sent[0]).toMatchObject({ type: 'session', meta: { effort: 'o/r#1' } })
+    expect((sent[0] as { meta: { stage?: string } }).meta.stage).toBeUndefined()
+    expect(sent.some((m) => m.type === 'error')).toBe(false)
+  })
+
   it('close detaches all subscriptions', async () => {
     await connection.onMessage(startMsg)
     connection.close()

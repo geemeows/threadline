@@ -36,9 +36,17 @@ export interface Connection {
   close(): void
 }
 
+/**
+ * Derive an effort's current pipeline stage from its artifact snapshot (#105 /
+ * ADR-0002). Backed by `stageService.snapshot(effort).stage`; the connection
+ * awaits it at `start_session` so the client never supplies a stage.
+ */
+export type DeriveStage = (effort: string) => Promise<string | undefined>
+
 export function createConnection(
   registry: SessionRegistry,
   send: (msg: ServerMessage) => void,
+  deriveStage?: DeriveStage,
 ): Connection {
   const detachers = new Map<string, () => void>()
 
@@ -62,6 +70,19 @@ export function createConnection(
         switch (msg.type) {
           case 'start_session': {
             const { type: _, ...opts } = msg
+            // ADR-0002: the client never sets a pipeline stage. When the session
+            // is bound to an effort, the server derives the stage from that
+            // effort's artifact snapshot (an empty map derives to `planning`).
+            // An effort-less (ad-hoc) session stays stage-less. A derivation
+            // failure — e.g. tracker offline — is non-fatal: the session runs
+            // stage-agnostic rather than refusing to start.
+            if (deriveStage && opts.effort && opts.stage === undefined) {
+              try {
+                opts.stage = await deriveStage(opts.effort)
+              } catch {
+                // snapshot unavailable — leave the session stage-agnostic
+              }
+            }
             const meta = registry.start(opts)
             send({ type: 'session', meta })
             attach(meta.id)

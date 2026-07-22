@@ -79,7 +79,7 @@ export function SessionPane() {
           <button
             type="button"
             title="New session"
-            onClick={() => store.setNewSessionOpen(true)}
+            onClick={() => store.setNewSessionOpen(true, state.selectedEffort)}
             className="px-3.5 py-2.5 text-[15px] text-[var(--fg3)] transition-colors hover:text-foreground"
           >
             +

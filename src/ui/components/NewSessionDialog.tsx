@@ -1,10 +1,12 @@
-// Start a session: pick the repo (cwd), optional stage tag, and the prompt.
-// Rebuilt to the mint Threadline Workspace design (#83) on the shared
+// Start a session: pick the repo (cwd) and the prompt. The stage is never set
+// here — the server derives it from the bound effort at start (ADR-0002 / #105),
+// so the modal has no Stage field. The effort binding is passed in by whoever
+// opened the modal (`newSessionEffort`); null means an effort-less ad-hoc
+// session. Rebuilt to the mint Threadline Workspace design (#83) on the shared
 // OverlayShell particle (#78 vocabulary): a top-anchored panel modal with a
 // mono effort-ref beside the title, a stacked field group, and a mint
 // Start-session action. Still a Base UI Dialog underneath, so focus-trap, Esc,
-// and the Select/Textarea a11y come free. Behavior is unchanged from the #67
-// dialog — the reskin only restyles the chrome and the fields.
+// and the Select/Textarea a11y come free.
 
 import { Play } from 'lucide-react'
 import { useState } from 'react'
@@ -14,24 +16,17 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { store, useStore } from '../lib/store.js'
-import { PIPELINE_STAGES } from '../lib/types.js'
 import { OverlayShell } from './particles.js'
-
-const STAGE_ITEMS = [
-  { value: '', label: '— none —' },
-  ...PIPELINE_STAGES.map((s) => ({ value: s.key, label: s.label })),
-]
 
 export function NewSessionDialog() {
   const state = useStore()
   const [repoPath, setRepoPath] = useState('')
-  const [stage, setStage] = useState('')
   const [prompt, setPrompt] = useState('')
 
   const repos = state.workspace?.repos ?? []
   const repoItems = repos.map((repo) => ({ value: repo.path, label: repo.name }))
   const cwd = repoPath || repos[0]?.path || ''
-  const effort = state.efforts.find((e) => e.ref.id === state.selectedEffort)
+  const effort = state.efforts.find((e) => e.ref.id === state.newSessionEffort)
 
   const disconnected = state.conn !== 'open'
 
@@ -41,12 +36,13 @@ export function NewSessionDialog() {
       toast.error('Disconnected — reconnecting. Try again in a moment.')
       return
     }
+    // No stage on the wire — the server derives it from the effort (or leaves
+    // the session stage-less when unbound).
     store.startSession({
       cwd,
       prompt: prompt.trim(),
       permissionPolicy: { mode: 'default', intercept: true },
       effort: effort?.ref.id,
-      stage: stage || undefined,
     })
     store.setNewSessionOpen(false)
     setPrompt('')
@@ -77,22 +73,6 @@ export function NewSessionDialog() {
             </SelectTrigger>
             <SelectContent>
               {repoItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field>
-          <FieldLabel className="text-xs font-semibold text-muted-foreground">Stage</FieldLabel>
-          <Select items={STAGE_ITEMS} value={stage} onValueChange={(v) => setStage(String(v ?? ''))}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="— none —" />
-            </SelectTrigger>
-            <SelectContent>
-              {STAGE_ITEMS.map((item) => (
                 <SelectItem key={item.value} value={item.value}>
                   {item.label}
                 </SelectItem>

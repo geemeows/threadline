@@ -50,6 +50,10 @@ export interface State {
   selectedStageIdx: number | null
   inboxOpen: boolean
   newSessionOpen: boolean
+  /** Effort the New-session modal binds to, set by whoever opened it; null = an
+   *  effort-less (ad-hoc) session. Never read from `selectedEffort` — the
+   *  binding follows what was clicked, not the current selection (ADR-0002). */
+  newSessionEffort: string | null
   /** ⌘K command palette (search over efforts + sessions). */
   paletteOpen: boolean
   setup: SetupStatus | null
@@ -76,6 +80,7 @@ export class Store {
     selectedStageIdx: null,
     inboxOpen: false,
     newSessionOpen: false,
+    newSessionEffort: null,
     paletteOpen: false,
     setup: null,
     setupOpen: false,
@@ -445,8 +450,11 @@ export class Store {
     this.set({ inboxOpen: open })
   }
 
-  setNewSessionOpen(open: boolean) {
-    this.set({ newSessionOpen: open })
+  /** Open/close the New-session modal, binding it to `effort` (null = ad-hoc).
+   *  The binding is passed in by the caller — the effort row, rail, or palette —
+   *  never inferred from the current selection. */
+  setNewSessionOpen(open: boolean, effort: string | null = null) {
+    this.set({ newSessionOpen: open, newSessionEffort: open ? effort : null })
   }
 
   setPaletteOpen(open: boolean) {

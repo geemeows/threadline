@@ -160,7 +160,14 @@ export function createApp(deps: AppDeps) {
       let connection: ReturnType<typeof createConnection> | undefined
       return {
         onOpen(_event, ws) {
-          connection = createConnection(registry, (msg) => ws.send(JSON.stringify(msg)))
+          connection = createConnection(
+            registry,
+            (msg) => ws.send(JSON.stringify(msg)),
+            // ADR-0002: derive a bound session's stage from its effort snapshot
+            // at start, so no client path can set a stage. Reuses the same
+            // lazily-built stage service that backs GET /api/stage.
+            async (effort) => (await (await stageService()).snapshot(effort)).stage,
+          )
         },
         onMessage(event, _ws) {
           void connection?.onMessage(String(event.data))

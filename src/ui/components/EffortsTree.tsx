@@ -92,7 +92,7 @@ export function EffortsTree() {
             <button
               type="button"
               title="New session"
-              onClick={() => store.setNewSessionOpen(true)}
+              onClick={() => store.setNewSessionOpen(true, state.selectedEffort)}
               className="inline-flex size-5 items-center justify-center rounded-md text-[var(--fg3)] transition-colors hover:bg-muted hover:text-foreground"
             >
               <Plus className="size-4" />

@@ -76,3 +76,53 @@ describe('store pipeline actions', () => {
     expect(store.getState().notices).toEqual([])
   })
 })
+
+describe('store session start (ADR-0002: client never sets a stage)', () => {
+  /** Give the store an open fake socket and capture what it sends. */
+  function withSocket(store: Store): string[] {
+    const sent: string[] = []
+    ;(store as unknown as {
+      ws: { readyState: number; OPEN: number; send: (d: string) => void }
+    }).ws = { readyState: 1, OPEN: 1, send: (d) => sent.push(d) }
+    return sent
+  }
+
+  it('startSession sends no stage and forwards the effort binding', () => {
+    const store = new Store()
+    const sent = withSocket(store)
+    store.startSession({
+      cwd: '/ws/repo',
+      prompt: 'go',
+      permissionPolicy: { mode: 'default', intercept: true },
+      effort: 'o/r#1',
+    })
+    expect(sent).toHaveLength(1)
+    const msg = JSON.parse(sent[0]!) as Record<string, unknown>
+    expect(msg.type).toBe('start_session')
+    expect(msg.effort).toBe('o/r#1')
+    expect('stage' in msg).toBe(false)
+  })
+
+  it('an effort-less (ad-hoc) start sends neither effort nor stage', () => {
+    const store = new Store()
+    const sent = withSocket(store)
+    store.startSession({
+      cwd: '/ws/repo',
+      prompt: 'go',
+      permissionPolicy: { mode: 'default', intercept: true },
+    })
+    const msg = JSON.parse(sent[0]!) as Record<string, unknown>
+    expect('effort' in msg).toBe(false)
+    expect('stage' in msg).toBe(false)
+  })
+
+  it('setNewSessionOpen binds the modal to the clicked effort and clears it on close', () => {
+    const store = new Store()
+    store.setNewSessionOpen(true, 'o/r#9')
+    expect(store.getState()).toMatchObject({ newSessionOpen: true, newSessionEffort: 'o/r#9' })
+    store.setNewSessionOpen(true) // ad-hoc: no binding
+    expect(store.getState().newSessionEffort).toBeNull()
+    store.setNewSessionOpen(false)
+    expect(store.getState()).toMatchObject({ newSessionOpen: false, newSessionEffort: null })
+  })
+})
