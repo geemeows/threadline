@@ -9,6 +9,7 @@ import type {
   AgentAdapter,
   AgentEvent,
   PermissionDecision,
+  PermissionMode,
   StartOptions,
   UserMessage,
 } from '../adapters/index.js'
@@ -47,6 +48,7 @@ interface LiveSession {
   listeners: Set<SessionListener>
   send: (msg: UserMessage) => void
   respondPermission: (id: string, decision: PermissionDecision) => void
+  setPermissionMode: (mode: PermissionMode) => void
   interrupt: () => void
   kill: () => void
 }
@@ -75,7 +77,7 @@ export class SessionRegistry {
 
   start(opts: StartSessionOptions): SessionMeta {
     const adapter = this.pickAdapter(opts.adapter)
-    return this.track(adapter.name, opts, (o) => adapter.start(o))
+    return this.track(adapter, opts, (o) => adapter.start(o))
   }
 
   /** Re-open an ended session with the resume token its adapter minted. */
@@ -88,11 +90,13 @@ export class SessionRegistry {
     const opts: StartSessionOptions = {
       cwd: prior.cwd,
       prompt,
-      permissionPolicy: { mode: 'default', intercept: true },
+      // Carry the session's chosen mode across the resume (#91) — the composer
+      // switch may have set it while the prior run was live, or after it ended.
+      permissionPolicy: { mode: prior.permissionMode ?? 'default', intercept: true },
       effort: prior.effort,
       stage: prior.stage,
     }
-    return this.track(adapter.name, opts, (o) => adapter.resume(prior.resumeToken!, o))
+    return this.track(adapter, opts, (o) => adapter.resume(prior.resumeToken!, o))
   }
 
   get(sessionId: string): SessionMeta | undefined {
@@ -132,6 +136,29 @@ export class SessionRegistry {
     const session = this.require(sessionId)
     session.respondPermission(permissionId, decision)
     this.record(session, { type: 'permission_response', id: permissionId, decision })
+  }
+
+  /**
+   * Set a session's permission mode (#91). Live sessions on a `livePermissionMode`
+   * adapter flip immediately; either way the mode is persisted on meta so the next
+   * resume carries it. Recording it as a transcript event echoes the change to
+   * every attached client and survives a re-open.
+   */
+  async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<void> {
+    const live = this.live.get(sessionId)
+    if (live) {
+      if (live.meta.livePermissionMode) live.setPermissionMode(mode)
+      live.meta.permissionMode = mode
+      void this.store.writeMeta(live.meta).catch(() => {})
+      this.record(live, { type: 'permission_mode', mode })
+      return
+    }
+    // Ended session: no process to flip — persist so the next resume starts in
+    // this mode.
+    const meta = await this.store.readMeta(sessionId)
+    if (!meta) throw new RegistryError(`unknown session: ${sessionId}`)
+    meta.permissionMode = mode
+    await this.store.writeMeta(meta)
   }
 
   /**
@@ -186,7 +213,7 @@ export class SessionRegistry {
   }
 
   private track(
-    adapterName: string,
+    adapter: AgentAdapter,
     opts: StartSessionOptions,
     spawn: (o: StartOptions) => ReturnType<AgentAdapter['start']>,
   ): SessionMeta {
@@ -196,13 +223,15 @@ export class SessionRegistry {
     const session = spawn(this.augmentPlanning(id, this.withTrackerMcp(opts)))
     const meta: SessionMeta = {
       id,
-      adapter: adapterName,
+      adapter: adapter.name,
       cwd: opts.cwd,
       prompt: opts.prompt,
       effort: opts.effort,
       stage: opts.stage,
       createdAt: this.now(),
       status: 'running',
+      permissionMode: opts.permissionPolicy.mode,
+      livePermissionMode: adapter.capabilities.livePermissionMode,
     }
     const entry: LiveSession = {
       meta,
@@ -210,6 +239,7 @@ export class SessionRegistry {
       listeners: new Set(),
       send: (m) => session.send(m),
       respondPermission: (id, d) => session.respondPermission(id, d),
+      setPermissionMode: (mode) => session.setPermissionMode(mode),
       interrupt: () => session.interrupt(),
       kill: () => session.kill(),
     }

@@ -93,6 +93,38 @@ describe('SessionRegistry', () => {
     expect(session.killed).toBe(true)
   })
 
+  it('setPermissionMode flips a live session, updates meta, and records the change', async () => {
+    const meta = registry.start(startOpts)
+    expect(meta.permissionMode).toBe('default')
+    const session = adapter.sessions[0]!
+    const received: TranscriptEvent[] = []
+    registry.subscribe(meta.id, (e) => received.push(e))
+
+    await registry.setPermissionMode(meta.id, 'acceptEdits')
+
+    expect(session.permissionModes).toEqual(['acceptEdits'])
+    expect(registry.get(meta.id)?.permissionMode).toBe('acceptEdits')
+    expect(received).toContainEqual({ type: 'permission_mode', mode: 'acceptEdits' })
+    await eventually(async () =>
+      expect((await store.readMeta(meta.id))?.permissionMode).toBe('acceptEdits'),
+    )
+  })
+
+  it('carries the chosen permission mode into a resume (ended-session path persists only)', async () => {
+    const meta = registry.start(startOpts)
+    const session = adapter.sessions[0]!
+    session.emit({ type: 'session_started', resumeToken: 'tok-1', model: 'm', raw: {} })
+    session.emit({ type: 'session_ended', outcome: 'completed', resumable: true, raw: {} })
+    await eventually(async () => expect((await store.readMeta(meta.id))?.status).toBe('ended'))
+
+    // No live process to flip — this must persist to meta so resume reads it.
+    await registry.setPermissionMode(meta.id, 'bypassPermissions')
+    const resumed = await registry.resume(meta.id, 'continue')
+
+    expect(resumed.permissionMode).toBe('bypassPermissions')
+    expect(adapter.resumed.at(-1)?.opts.permissionPolicy.mode).toBe('bypassPermissions')
+  })
+
   it('marks the session ended with outcome and usage, and persists meta', async () => {
     const meta = registry.start(startOpts)
     const session = adapter.sessions[0]!

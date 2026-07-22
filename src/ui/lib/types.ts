@@ -1,7 +1,7 @@
 // Type-only bridges to the server — one package (#9), so the UI compiles
 // against the real wire shapes instead of hand-mirrored copies.
 
-export type { PermissionDecision, SessionOutcome, Usage } from '../../adapters/types.js'
+export type { PermissionDecision, PermissionMode, SessionOutcome, Usage } from '../../adapters/types.js'
 export type { StageSnapshot, Stage, TicketView } from '../../gating/types.js'
 export type { CompleteResult, LandResult } from '../../pipeline/orchestrator.js'
 export type { EffortSummary } from '../../server/efforts.js'

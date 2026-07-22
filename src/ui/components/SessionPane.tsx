@@ -12,13 +12,15 @@
 // Behavior is unchanged from the #8/#66 pane — approvals resolve inline, the
 // global inbox links here, drafts survive a dropped socket.
 
-import { ChevronRight, Pause, Terminal, TriangleAlert, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { ChevronRight, Pause, ShieldCheck, Terminal, TriangleAlert, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Kbd } from '@/components/ui/kbd'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -26,14 +28,22 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
+  useMessageScroller,
 } from '@/components/ui/message-scroller'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { Markdown } from './Markdown.js'
+import { ToolInput, ToolOutput } from './ToolValue.js'
 import { adhocSessions, effortSessions, sessionLabel, statusOf } from '../lib/derive.js'
 import { store, useStore } from '../lib/store.js'
 import type { SessionView } from '../lib/store.js'
-import { pendingApprovals, reduceTranscript, summarizeInput, summarizeOutput } from '../lib/transcript.js'
+import {
+  PERMISSION_MODES,
+  pendingApprovals,
+  permissionModeLabel,
+  reduceTranscript,
+  summarizeInput,
+} from '../lib/transcript.js'
 import type { ChatItem, QuestionItem, QuestionSpec, ToolItem } from '../lib/transcript.js'
 import { MintPill, StatusBadge, StatusDot } from './particles.js'
 
@@ -69,7 +79,7 @@ export function SessionPane() {
           <button
             type="button"
             title="New session"
-            onClick={() => store.setNewSessionOpen(true)}
+            onClick={() => store.setNewSessionOpen(true, state.selectedEffort)}
             className="px-3.5 py-2.5 text-[15px] text-[var(--fg3)] transition-colors hover:text-foreground"
           >
             +
@@ -111,6 +121,7 @@ function Chat({ view }: { view: SessionView }) {
   const items = reduceTranscript(meta, view.events)
   const disconnected = state.conn !== 'open'
   const repo = meta.cwd.split('/').filter(Boolean).pop()
+  const pendingApprovalIds = pendingApprovals(view.events).map((a) => a.id)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -174,6 +185,7 @@ function Chat({ view }: { view: SessionView }) {
             </MessageScrollerContent>
           </MessageScrollerViewport>
           <MessageScrollerButton />
+          <ApprovalAutoScroll ids={pendingApprovalIds} />
         </MessageScroller>
       </MessageScrollerProvider>
 
@@ -189,6 +201,38 @@ function itemKey(item: ChatItem, i: number): string {
   if (item.kind === 'tool') return `tool-${item.callId}`
   if (item.kind === 'approval') return `approval-${item.id}`
   return `${item.kind}-${i}`
+}
+
+/** Pull the transcript to a permission prompt the instant it needs the human —
+ *  whether it streams in for the session you're already watching or you deep-link
+ *  into a waiting one (#90). This is the deliberate exception to #89: ordinary
+ *  appended output must NOT yank a scrolled-up reader, but a blocking approval is
+ *  worth the interruption. The scroll fires ONLY on the absent→pending edge (an
+ *  id not seen before), so re-renders while you read the prompt never re-pull;
+ *  resolved ids drop out of `seen`, so a fresh request always re-triggers. Lives
+ *  inside the scroller provider so it can reach `scrollToMessage`. */
+function ApprovalAutoScroll({ ids }: { ids: string[] }) {
+  const { scrollToMessage } = useMessageScroller()
+  const seen = useRef<Set<string>>(new Set())
+  const latest = useRef(ids)
+  latest.current = ids
+  const key = ids.join(',')
+  useEffect(() => {
+    const fresh = latest.current.find((id) => !seen.current.has(id))
+    seen.current = new Set(latest.current)
+    if (!fresh) return
+    const target = `approval-${fresh}`
+    // Rows are virtualized (`content-visibility:auto` collapses off-screen items
+    // to a placeholder), so their real height resolves only as they scroll into
+    // view — a single scroll lands short of the prompt. Re-assert across a few
+    // frames until the layout settles on it. One-shot per fresh id, so a reader
+    // scrolling away after it lands isn't fought.
+    const timers = [0, 120, 300, 600].map((d) =>
+      setTimeout(() => scrollToMessage(target, { align: 'end' }), d),
+    )
+    return () => timers.forEach(clearTimeout)
+  }, [key, scrollToMessage])
+  return null
 }
 
 function ChatMessage({
@@ -251,37 +295,27 @@ function ToolCall({ item }: { item: ToolItem }) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="mt-1 flex flex-col gap-2 rounded-lg border bg-card/50 p-2.5">
-          <ToolBlock label="input" value={item.input} />
-          {item.output !== undefined && <ToolBlock label="output" value={item.output} error={item.error} />}
+          <ToolBlock label="input">
+            <ToolInput name={item.name} value={item.input} />
+          </ToolBlock>
+          {item.output !== undefined && (
+            <ToolBlock label="output">
+              <ToolOutput name={item.name} value={item.output} error={item.error} />
+            </ToolBlock>
+          )}
         </div>
       </CollapsibleContent>
     </Collapsible>
   )
 }
 
-function ToolBlock({ label, value, error }: { label: string; value: unknown; error?: boolean }) {
+function ToolBlock({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{label}</span>
-      <pre
-        className={cn(
-          'max-h-48 overflow-auto rounded-md bg-background px-2.5 py-2 font-mono text-xs whitespace-pre-wrap text-foreground',
-          error && 'text-destructive',
-        )}
-      >
-        {formatValue(value)}
-      </pre>
+      {children}
     </div>
   )
-}
-
-function formatValue(value: unknown): string {
-  if (typeof value === 'string') return value
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
 }
 
 /** Interactive AskUserQuestion card (#82 follow-up): renders the agent's
@@ -444,9 +478,9 @@ function ApprovalCard({
           </StatusBadge>
         )}
       </div>
-      <pre className="my-2.5 max-h-44 overflow-auto rounded-lg border bg-background px-[11px] py-[9px] font-mono text-xs whitespace-pre-wrap text-foreground">
-        {summarizeInput(item.input) ? formatValue(item.input) : summarizeOutput(item.input)}
-      </pre>
+      <div className="my-2.5">
+        <ToolInput name={item.tool} value={item.input} />
+      </div>
       {!resolved && (
         <div className="flex items-center gap-2">
           <Button
@@ -531,6 +565,51 @@ function PendingApprovalBar({
   )
 }
 
+/** Per-session permission-mode switch (#91): Normal / Accept edits / Auto map to
+ *  the adapter's `default` / `acceptEdits` / `bypassPermissions`. On a running
+ *  session whose adapter can change mode mid-run (claude-code can) the change
+ *  applies live; otherwise it rides the next resume. Lives in the composer per
+ *  the map's locked decision (per-session, not a global default). */
+function PermissionModeSelect({ view, disconnected }: { view: SessionView; disconnected: boolean }) {
+  const { meta } = view
+  const mode = meta.permissionMode ?? 'default'
+  const running = meta.status === 'running'
+  const live = running && meta.livePermissionMode !== false
+  // Mid-run reality (verified against the CLI): Normal↔Accept edits flip live,
+  // but Auto (bypassPermissions) can't be turned on mid-run — the CLI would need
+  // relaunching without the stdio permission tool — so it lands on the next
+  // resume. Say so, rather than implying every change is instant.
+  const hint = live
+    ? 'How tools are gated for this session. Normal and Accept edits apply immediately; Auto takes effect on the next resume.'
+    : running
+      ? 'This adapter can’t change mode mid-run — applies on the next resume.'
+      : 'Applies when you resume this session.'
+  return (
+    <Select value={mode} onValueChange={(v) => v && store.setPermissionMode(meta.id, v as typeof mode)}>
+      <SelectTrigger
+        size="sm"
+        disabled={disconnected}
+        title={hint}
+        aria-label={`Permission mode: ${permissionModeLabel(mode)}`}
+        className="gap-1 border-transparent bg-transparent px-2 text-[11px] text-[var(--fg3)] hover:text-foreground"
+      >
+        <ShieldCheck className="size-3.5" />
+        <SelectValue>{(v) => permissionModeLabel(v as typeof mode)}</SelectValue>
+      </SelectTrigger>
+      <SelectContent side="top" align="end" alignItemWithTrigger={false} className="min-w-60">
+        {PERMISSION_MODES.map((m) => (
+          <SelectItem key={m.mode} value={m.mode}>
+            <span className="flex flex-col gap-0.5 py-0.5">
+              <span className="text-[13px] font-medium text-foreground">{m.label}</span>
+              <span className="text-[11px] text-[var(--fg3)]">{m.description}</span>
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 /** Command chips over the composer — clickable quick-inserts that prefill the
  *  textarea (the mockup's `/spec` `/override` `@ticket` affordances, made real). */
 const COMPOSER_CHIPS: { insert: string; cmd: string; label?: string }[] = [
@@ -611,16 +690,18 @@ function Composer({ view, disconnected }: { view: SessionView; disconnected: boo
         />
         <div className="mt-1.5 flex items-center gap-2.5">
           <span className="text-[11px] text-[var(--fg3)]">headless · {meta.adapter}</span>
-          <Button
-            size="sm"
-            className="ml-auto"
-            disabled={disabled || disconnected}
-            title={disconnected ? 'Disconnected — reconnecting' : undefined}
-            onClick={submit}
-          >
-            {ended && resumable ? 'Resume' : 'Send'}
-            <Kbd className="bg-primary-foreground/15 text-primary-foreground">⏎</Kbd>
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {!disabled && <PermissionModeSelect view={view} disconnected={disconnected} />}
+            <Button
+              size="sm"
+              disabled={disabled || disconnected}
+              title={disconnected ? 'Disconnected — reconnecting' : undefined}
+              onClick={submit}
+            >
+              {ended && resumable ? 'Resume' : 'Send'}
+              <Kbd className="bg-primary-foreground/15 text-primary-foreground">⏎</Kbd>
+            </Button>
+          </div>
         </div>
       </div>
     </div>

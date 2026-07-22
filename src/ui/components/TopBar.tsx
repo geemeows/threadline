@@ -15,6 +15,16 @@ export function TopBar() {
   const state = useStore()
   const queue = needsYou(state)
   const inboxCount = queue.length + state.notices.length
+  // One-hop deep-link (#90): when a single session is waiting and nothing else
+  // is queued, "Needs you" has an obvious target — jump straight into its chat
+  // (selectSession closes the inbox, and the pane scrolls the prompt into view).
+  // Any ambiguity — more than one waiter, or a pipeline notice in the mix — still
+  // opens the Inbox as the multi-waiter list.
+  const openNeedsYou = () => {
+    const target = queue.length === 1 && state.notices.length === 0 ? queue[0] : null
+    if (target) store.selectSession(target.view.meta.id)
+    else store.setInboxOpen(true)
+  }
   const effort = state.efforts.find((e) => e.ref.id === state.selectedEffort) ?? null
   const workspaceName = state.workspace ? state.workspace.root.split('/').filter(Boolean).pop() : '…'
   const repoCount = state.workspace?.repos?.length
@@ -55,7 +65,7 @@ export function TopBar() {
         {inboxCount > 0 && (
           <button
             type="button"
-            onClick={() => store.setInboxOpen(true)}
+            onClick={openNeedsYou}
             className="inline-flex items-center gap-2 rounded-[9px] border border-warning/40 bg-warning/[0.08] px-3 py-1.5 text-[12.5px] font-semibold text-warning transition-opacity hover:opacity-85"
           >
             <span aria-hidden className="tl-pulse size-[7px] rounded-full bg-warning" />

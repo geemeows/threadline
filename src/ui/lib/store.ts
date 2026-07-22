@@ -9,6 +9,7 @@ import type {
   EffortSummary,
   LandResult,
   PermissionDecision,
+  PermissionMode,
   ServerMessage,
   SessionMeta,
   SetupStatus,
@@ -49,6 +50,10 @@ export interface State {
   selectedStageIdx: number | null
   inboxOpen: boolean
   newSessionOpen: boolean
+  /** Effort the New-session modal binds to, set by whoever opened it; null = an
+   *  effort-less (ad-hoc) session. Never read from `selectedEffort` — the
+   *  binding follows what was clicked, not the current selection (ADR-0002). */
+  newSessionEffort: string | null
   /** ⌘K command palette (search over efforts + sessions). */
   paletteOpen: boolean
   setup: SetupStatus | null
@@ -75,6 +80,7 @@ export class Store {
     selectedStageIdx: null,
     inboxOpen: false,
     newSessionOpen: false,
+    newSessionEffort: null,
     paletteOpen: false,
     setup: null,
     setupOpen: false,
@@ -200,6 +206,7 @@ export class Store {
     const meta = { ...view.meta }
     if (event.type === 'usage_update') meta.usage = event.usage
     if (event.type === 'session_started') meta.resumeToken = event.resumeToken
+    if (event.type === 'permission_mode') meta.permissionMode = event.mode
     if (event.type === 'session_ended') {
       meta.status = 'ended'
       meta.outcome = event.outcome
@@ -267,6 +274,22 @@ export class Store {
 
   respondPermission(sessionId: string, id: string, decision: PermissionDecision) {
     this.sendWs({ type: 'permission', sessionId, id, decision })
+  }
+
+  /** Change a session's permission mode (#91). Optimistically reflects it on the
+   *  session's meta so the composer switch feels instant; the server echoes a
+   *  `permission_mode` event that re-asserts the same value and persists it. */
+  setPermissionMode(sessionId: string, mode: PermissionMode) {
+    const view = this.state.sessions[sessionId]
+    if (view) {
+      this.set({
+        sessions: {
+          ...this.state.sessions,
+          [sessionId]: { ...view, meta: { ...view.meta, permissionMode: mode } },
+        },
+      })
+    }
+    this.sendWs({ type: 'set_permission_mode', sessionId, mode })
   }
 
   /** Route an AskUserQuestion selection back to the agent as its tool_result. */
@@ -427,8 +450,11 @@ export class Store {
     this.set({ inboxOpen: open })
   }
 
-  setNewSessionOpen(open: boolean) {
-    this.set({ newSessionOpen: open })
+  /** Open/close the New-session modal, binding it to `effort` (null = ad-hoc).
+   *  The binding is passed in by the caller — the effort row, rail, or palette —
+   *  never inferred from the current selection. */
+  setNewSessionOpen(open: boolean, effort: string | null = null) {
+    this.set({ newSessionOpen: open, newSessionEffort: open ? effort : null })
   }
 
   setPaletteOpen(open: boolean) {

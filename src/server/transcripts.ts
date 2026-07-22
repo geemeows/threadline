@@ -5,7 +5,13 @@
 
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { AgentEvent, PermissionDecision, SessionOutcome, Usage } from '../adapters/index.js'
+import type {
+  AgentEvent,
+  PermissionDecision,
+  PermissionMode,
+  SessionOutcome,
+  Usage,
+} from '../adapters/index.js'
 import { transcriptsDir } from './home.js'
 
 // The adapter seam's AgentEvent stream is CLI output only — it never carries
@@ -16,6 +22,7 @@ export type TranscriptEvent =
   | AgentEvent
   | { type: 'user_message'; text: string }
   | { type: 'permission_response'; id: string; decision: PermissionDecision }
+  | { type: 'permission_mode'; mode: PermissionMode }
 
 export interface SessionMeta {
   id: string
@@ -30,6 +37,12 @@ export interface SessionMeta {
   outcome?: SessionOutcome
   resumeToken?: string
   usage?: Usage
+  /** Current permission gating stance; the composer switch drives it (#91).
+   *  Applied live when the adapter supports it, else on the next resume. */
+  permissionMode?: PermissionMode
+  /** Whether this session's adapter can change permissionMode mid-run — lets the
+   *  composer switch say "applies live" vs "applies on resume". */
+  livePermissionMode?: boolean
 }
 
 export class TranscriptStore {

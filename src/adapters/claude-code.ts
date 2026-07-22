@@ -6,6 +6,7 @@ import type {
   AgentSession,
   Capabilities,
   PermissionDecision,
+  PermissionMode,
   SessionOutcome,
   StartOptions,
   Usage,
@@ -39,6 +40,10 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   readonly capabilities: Capabilities = {
     liveInput: true,
     livePermissions: true,
+    // Verified empirically (claude 2.1.215): a `set_permission_mode` control
+    // request on stdin flips the running session's mode and is answered with a
+    // control_response {subtype:"success", response:{mode}}.
+    livePermissionMode: true,
     streamingText: true,
     reportsTokens: true,
     reportsCost: true,
@@ -147,6 +152,17 @@ class ClaudeCodeSession implements AgentSession {
     this.writeLine({
       type: 'control_response',
       response: { subtype: 'success', request_id: id, response },
+    })
+  }
+
+  setPermissionMode(mode: PermissionMode): void {
+    // Flips the live session's --permission-mode. The CLI answers with a
+    // control_response {subtype:"success", response:{mode}} which translate()
+    // ignores — the registry already treats the write as authoritative.
+    this.writeLine({
+      type: 'control_request',
+      request_id: `setmode-${Math.random().toString(36).slice(2)}`,
+      request: { subtype: 'set_permission_mode', mode },
     })
   }
 
