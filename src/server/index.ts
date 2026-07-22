@@ -9,7 +9,7 @@ import { ClaudeCodeAdapter } from '../adapters/index.js'
 import type { GhExec } from '../gating/index.js'
 import type { Exec } from '../pipeline/git.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
-import { listEfforts } from './efforts.js'
+import { listEfforts, mintEffort } from './efforts.js'
 import { createPipelineApp, type OverrideContext } from './pipeline-routes.js'
 import { SessionRegistry, type TrackerMcpFactory } from './registry.js'
 import { createSetupApp, type SetupRouteDeps } from './setup-routes.js'
@@ -110,6 +110,24 @@ export function createApp(deps: AppDeps) {
       includeClosed: c.req.query('state') === 'all',
     })),
   )
+  // New-effort mint (#106): a top-level effort-creation write — the map issue
+  // exists before any session, which is what lets a bound planning session
+  // derive stage=planning. Distinct from the in-session, stage-gated
+  // child-only create_issue tracker tool (assertCreatable is not involved).
+  app.post('/api/efforts', async (c) => {
+    const { repo: repoName, idea } = (await c.req.json().catch(() => ({}))) as {
+      repo?: string
+      idea?: string
+    }
+    if (!idea || !idea.trim()) return c.json({ error: 'idea is required' }, 400)
+    const repo = workspace.repos.find((r) => r.name === repoName)
+    if (!repo) return c.json({ error: `unknown repo: ${repoName ?? '(none)'}` }, 404)
+    try {
+      return c.json(await mintEffort(repo, idea, ghExec), 201)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 502)
+    }
+  })
   app.get('/api/stage', async (c) => {
     const effort = c.req.query('effort')
     if (!effort) return c.json({ error: 'missing ?effort=<ref-id>' }, 400)

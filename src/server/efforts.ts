@@ -8,7 +8,10 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { TicketRef } from '../tracker/types.js'
 import type { GhExec } from '../gating/index.js'
+import { provisionalName } from './effort-name.js'
 import type { RepoInfo } from './workspace.js'
+
+export { provisionalName } from './effort-name.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -79,4 +82,37 @@ export async function listEfforts(
 async function repoNameWithOwner(repo: RepoInfo, exec: GhExec): Promise<string> {
   const out = await exec(['repo', 'view', '--json', 'nameWithOwner'], repo.path)
   return (JSON.parse(out) as { nameWithOwner: string }).nameWithOwner
+}
+
+/**
+ * Mint a brand-new effort: create a `wayfinder:map`-labelled issue in the home
+ * repo, titled with the provisional name derived from the idea, and return its
+ * EffortSummary (same ref shape as `listEfforts`). This is a top-level
+ * effort-creation write — the map exists *before* any session, which is what
+ * lets a bound planning session derive `stage=planning` (#98). It is distinct
+ * from the in-session, child-only, stage-gated `create_issue` tracker tool, so
+ * `assertCreatable` is not involved. The map is seeded with a provisional title
+ * only; the bound planning session charts Destination/Notes in-session (#110).
+ */
+export async function mintEffort(
+  repo: RepoInfo,
+  idea: string,
+  exec: GhExec = defaultExec,
+): Promise<EffortSummary> {
+  const title = provisionalName(idea)
+  const nameWithOwner = await repoNameWithOwner(repo, exec)
+  const out = await exec(
+    ['issue', 'create', '--title', title, '--label', 'wayfinder:map', '--body', ''],
+    repo.path,
+  )
+  // `gh issue create` prints the new issue's URL (last non-empty line).
+  const url = out.trim().split('\n').pop()?.trim() ?? ''
+  const number = Number(url.match(/\/(\d+)\s*$/)?.[1])
+  const ref = `${nameWithOwner}#${number}`
+  return {
+    ref: { id: ref, display: ref, url },
+    title,
+    state: 'open',
+    repo,
+  }
 }
